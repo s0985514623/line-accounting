@@ -5,12 +5,14 @@
  *    未預期例外 → log error（只記 eventId / type，不記個資）→ 若尚未用過 reply token，回「系統忙碌」。
  *  - `source.type !== 'user'`（group / room）一律忽略（ASM-11）。
  *  - 非白名單 userId（完全相等比對）：follow / message 回「此服務不開放使用」，postback 不回；不寫任何資料。
+ *  - 白名單 message 事件交給 text-message-handler（非文字訊息回格式說明，ASM-11）。
  *  - unfollow 與未知事件類型靜默忽略。
  * 依據：implementation-plan P1-2、「錯誤處理登記表」；specs/api/api.yml `/webhook/line`。
  */
 import type { Logger } from 'pino';
 import type { LineReplyGateway } from '../ports/line-reply-gateway';
 import type { FollowHandler } from './handlers/follow-handler';
+import type { TextMessageHandler } from './handlers/text-message-handler';
 import { textMessage } from './messages/builders';
 import { NOT_ALLOWED_TEXT, SYSTEM_BUSY_TEXT } from './messages/texts';
 import { EventReplier } from './reply-context';
@@ -18,6 +20,7 @@ import { WebhookEventSchema, type WebhookEvent } from './webhook-schema';
 
 export interface EventHandlers {
   follow: Pick<FollowHandler, 'handle'>;
+  message: Pick<TextMessageHandler, 'handle'>;
 }
 
 export interface EventDispatcherDeps {
@@ -79,8 +82,15 @@ export class EventDispatcher {
       case 'follow':
         await this.deps.handlers.follow.handle(replier);
         return;
+      case 'message':
+        if (event.message === undefined) {
+          logger.warn('message event without message; ignored');
+          return;
+        }
+        await this.deps.handlers.message.handle(event.message, replier);
+        return;
       default:
-        // message / postback 由 P3 起陸續接上；unfollow 與未知事件類型不處理
+        // postback 由 P3b 起接上；unfollow 與未知事件類型不處理
         logger.debug('event type not handled; ignored');
     }
   }

@@ -4,8 +4,18 @@
  */
 import type { Prisma, PrismaClient } from '@prisma/client';
 import type { DefaultCategory } from '../domain/default-categories';
+import type { EntryType, Ledger } from '../domain/enums';
 
 export type DbClient = PrismaClient | Prisma.TransactionClient;
+
+/** 比對 / 選單用的分類摘要。 */
+export interface CategorySummary {
+  id: number;
+  name: string;
+  isFallback: boolean;
+}
+
+const SUMMARY_SELECT = { id: true, name: true, isFallback: true } as const;
 
 export class CategoryRepository {
   constructor(private readonly db: DbClient) {}
@@ -30,5 +40,22 @@ export class CategoryRepository {
       skipDuplicates: true,
     });
     return result.count;
+  }
+
+  /** 同帳本同收支、名稱完全相等的分類（唯一約束 ledger × entryType × name）。 */
+  findByName(ledger: Ledger, entryType: EntryType, name: string): Promise<CategorySummary | null> {
+    return this.db.category.findUnique({
+      where: { ledger_entryType_name: { ledger, entryType, name } },
+      select: SUMMARY_SELECT,
+    });
+  }
+
+  /** 同帳本同收支的全部分類，依 id 升冪。 */
+  listByGroup(ledger: Ledger, entryType: EntryType): Promise<CategorySummary[]> {
+    return this.db.category.findMany({
+      where: { ledger, entryType },
+      orderBy: { id: 'asc' },
+      select: SUMMARY_SELECT,
+    });
   }
 }

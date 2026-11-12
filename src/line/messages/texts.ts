@@ -14,3 +14,15 @@ export const NOT_ALLOWED_TEXT = '此服務不開放使用';
 
 /** 單一事件處理發生未預期例外時的回覆（implementation-plan「錯誤處理登記表」）。 */
 export const SYSTEM_BUSY_TEXT = '系統忙碌，請稍後再試';
+
+/** 金額為 0、負數或小數（transaction/以文字訊息記帳.feature）。 */
+export const AMOUNT_NOT_POSITIVE_INTEGER_TEXT = '金額必須為正整數';
+
+/** 金額超過 99,999,999（ASM-03）。 */
+export const AMOUNT_TOO_LARGE_TEXT = '金額超過上限';
+
+/** 項目超過 50 字（ASM-04）。 */
+export const ITEM_TOO_LONG_TEXT = '項目最多 50 字';
+
+/** 分類按鈕 postback data 超過 300 字元（ASM-05）。 */
+export const NOTE_TOO_LONG_TEXT = '備註太長，請縮短後重新傳送，或改用表單記帳';
