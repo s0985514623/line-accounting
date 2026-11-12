@@ -1,5 +1,6 @@
 # LINE 記帳 — CI（deployment-runbook §6.1）
 # 觸發：PR，以及由 deploy.yml（P2b）以 workflow_call 重用。
+# 刻意不設 push 觸發：push main 時由 deploy.yml 呼叫本 workflow，避免 CI 重複執行。
 # 第三方 action 一律釘 commit SHA，註解標示對應版本。
 name: CI
 
@@ -17,8 +18,8 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        # 暫定 postgres:16（與 docker-compose.dev.yml 一致）；待 Q-2 共用環境盤點後對齊主版號（P2b）
-        image: postgres:16
+        # 與 VPS 共用 PostgreSQL、docker-compose.dev.yml 主版號一致（Q-2 已對齊：17）
+        image: postgres:17
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
@@ -90,8 +91,8 @@ jobs:
     needs: [backend, web]
     services:
       postgres:
-        # 暫定 postgres:16；待 Q-2 對齊（同 backend job）
-        image: postgres:16
+        # 同 backend job（postgres:17）
+        image: postgres:17
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test

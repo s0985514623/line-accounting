@@ -1,4 +1,4 @@
-# 本機開發 / 測試用 PostgreSQL（僅開發機；正式環境使用 VPS 共用 PostgreSQL）
+# 本機開發 / 測試用 PostgreSQL 17（僅開發機；正式環境使用 VPS 共用 PostgreSQL）
 #
 # 啟動：docker compose -f docker-compose.dev.yml up -d
 # 停止：docker compose -f docker-compose.dev.yml down        （保留資料）
@@ -13,7 +13,7 @@
 # 注意：初始化 SQL 只在 volume 首次建立時執行；若 volume 已存在請先 down -v。
 services:
   db:
-    image: postgres:16
+    image: postgres:17
     container_name: line-accounting-dev-db
     restart: unless-stopped
     environment:
@@ -22,7 +22,7 @@ services:
       POSTGRES_DB: test # 獨立的 test database
       TZ: UTC
     ports:
-      - '${DEV_DB_PORT:-5433}:5432'
+      - '${DEV_DB_PORT:-5434}:5432'
     volumes:
       - line_accounting_dev_pgdata:/var/lib/postgresql/data
     configs:

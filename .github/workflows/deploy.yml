@@ -1,0 +1,137 @@
+# LINE 記帳 — 建置與部署（deployment-runbook §6.2；P2b）
+#
+# push main：CI（重用 ci.yml）→ build & push GHCR（tag = commit sha）→ SSH 部署到 VPS → 公開 smoke
+# workflow_dispatch（輸入 tag）：不重新建置，直接以既有映像部署 = 一鍵回滾（不回滾 migration）
+#
+# VPS 端由 forced command 的 deploy.sh 執行（deploy/deploy.sh），SSH 只能下 `deploy <sha> <actor>`；
+# GITHUB_TOKEN 經 stdin 傳給 VPS 做一次性 docker login（job 結束即失效）。
+# 第三方 action 一律釘 commit SHA，註解標示對應版本。
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 回滾用：既有映像 tag（完整 40 碼 commit sha）
+        required: true
+        type: string
+
+# 部署序列化：不取消進行中的部署
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/s0985514623/line-accounting
+
+jobs:
+  ci:
+    name: CI
+    if: ${{ github.event_name == 'push' }}
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: build & push GHCR
+    if: ${{ github.event_name == 'push' }}
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: deploy（VPS）+ public smoke
+    needs: build
+    # push：build 成功才部署；workflow_dispatch：build 被略過，直接以輸入的 tag 部署
+    if: >-
+      ${{ !cancelled() && (needs.build.result == 'success' ||
+      (github.event_name == 'workflow_dispatch' && needs.build.result == 'skipped')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: https://${{ vars.APP_DOMAIN }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      TAG: ${{ inputs.tag || github.sha }}
+      APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+    steps:
+      - name: 驗證參數
+        run: |
+          if [[ ! "$TAG" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "::error::tag 格式錯誤（需為小寫十六進位 commit sha）：$TAG"
+            exit 1
+          fi
+          if [[ -z "$APP_DOMAIN" ]]; then
+            echo "::error::Environment production 未設定 variable APP_DOMAIN"
+            exit 1
+          fi
+
+      - name: SSH 設定
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: 部署 ${{ env.TAG }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          printf '%s\n' "$GHCR_TOKEN" | ssh -p "$VPS_PORT" \
+            -i ~/.ssh/id_ed25519 \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=15 \
+            "$VPS_USER@$VPS_HOST" \
+            "deploy $TAG $ACTOR"
+
+      - name: 清除 SSH 金鑰
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # smoke 腳本只用 Node 內建模組，無須 npm ci
+      - name: Public smoke
+        run: node scripts/smoke/remote-healthz.mjs "https://$APP_DOMAIN" --retries 10

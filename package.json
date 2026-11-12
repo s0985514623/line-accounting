@@ -18,6 +18,8 @@
     "test:bdd:dry": "cucumber-js --dry-run",
     "test:web": "npm --prefix web test",
     "smoke:image": "node scripts/smoke/image-smoke.mjs",
+    "smoke:deploy-static": "bash scripts/smoke/deploy-static-check.sh",
+    "smoke:remote": "node scripts/smoke/remote-healthz.mjs",
     "test": "npm run test:unit && npm run test:bdd && npm run test:web",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",

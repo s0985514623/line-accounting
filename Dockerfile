@@ -52,7 +52,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=web-build /app/web/dist ./web/dist
 COPY prisma ./prisma
 COPY package.json ./
-# P2b：deploy/compose.yml 建立後於此加入 `COPY deploy/compose.yml ./deploy/compose.yml`（deploy.sh 由映像取出）
+# P2b：VPS 端 docker-compose.yml 由使用者管理（/opt/my-services/apps/accounting），映像不攜帶 compose 檔
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 \
