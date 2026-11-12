@@ -4,7 +4,7 @@
 # 停止：docker compose -f docker-compose.dev.yml down        （保留資料）
 # 重置：docker compose -f docker-compose.dev.yml down -v     （清除 volume）
 #
-# 連線資訊（預設 port 5433；被占用時可用 DEV_DB_PORT 覆寫，並同步調整 URL）
+# 連線資訊（預設 port 5434；被占用時可用 DEV_DB_PORT 覆寫，並同步調整 URL）
 #   測試 DB（BDD / 單元 / DB 測試；會被 TRUNCATE，勿放開發資料）
 #     TEST_DATABASE_URL=postgresql://test:test@localhost:5433/test
 #   開發 DB
