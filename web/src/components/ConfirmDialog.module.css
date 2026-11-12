@@ -1,0 +1,68 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgb(17 24 39 / 0.45);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-5);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-card);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.2);
+}
+
+.title {
+  margin: 0 0 var(--space-2);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.body {
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.cancel,
+.confirm {
+  flex: 1;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancel {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-card);
+}
+
+.confirm {
+  border: 0;
+  background: var(--color-error);
+  color: #fff;
+}
+
+.cancel:disabled,
+.confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (min-width: 640px) {
+  .backdrop {
+    align-items: center;
+  }
+}

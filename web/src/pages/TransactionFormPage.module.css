@@ -1,0 +1,101 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-4);
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.backLink {
+  align-self: flex-start;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.backLink::before {
+  content: '‹ ';
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-card);
+}
+
+.toggles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-card);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--color-error);
+}
+
+textarea.input {
+  resize: vertical;
+}
+
+.fieldError {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-error);
+}
+
+.submit {
+  min-height: 48px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--color-brand);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.submit:active {
+  background: var(--color-brand-strong);
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

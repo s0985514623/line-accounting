@@ -1,0 +1,14 @@
+.errorPage {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+}
+
+.errorBox {
+  padding: var(--space-4);
+  border: 1px solid var(--color-error-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-error-bg);
+  color: var(--color-error);
+  text-align: center;
+}

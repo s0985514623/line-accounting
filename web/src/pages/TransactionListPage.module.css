@@ -1,0 +1,138 @@
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--space-4);
+  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.addLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-brand);
+  color: #fff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.addLink:active {
+  background: var(--color-brand-strong);
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-card);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: stretch;
+  border-top: 1px solid var(--color-border);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.rowLink {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  color: inherit;
+  text-decoration: none;
+}
+
+.rowLink:active {
+  background: var(--color-surface-overlay);
+}
+
+.rowMain {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.item {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.amountIncome,
+.amountExpense {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.amountIncome {
+  color: var(--color-income);
+}
+
+.amountExpense {
+  color: var(--color-expense);
+}
+
+.deleteButton {
+  flex-shrink: 0;
+  min-width: 56px;
+  padding: 0 var(--space-3);
+  border: 0;
+  border-left: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-error);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.empty {
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.dialogText {
+  margin: 0;
+}
