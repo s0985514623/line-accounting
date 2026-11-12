@@ -26,3 +26,15 @@ export const ITEM_TOO_LONG_TEXT = '項目最多 50 字';
 
 /** 分類按鈕 postback data 超過 300 字元（ASM-05）。 */
 export const NOTE_TOO_LONG_TEXT = '備註太長，請縮短後重新傳送，或改用表單記帳';
+
+/** 分類按鈕 postback data 解碼失敗（竄改、缺欄位、欄位不合法；ASM-07）。 */
+export const POSTBACK_DATA_INVALID_TEXT = '資料格式錯誤，請重新記帳';
+
+/** 分類按鈕 token 已使用（transaction/選擇分類完成記帳.feature）。 */
+export const PICK_ALREADY_USED_TEXT = '此筆已記帳';
+
+/** 選擇的分類不存在（transaction/選擇分類完成記帳.feature）。 */
+export const PICK_CATEGORY_NOT_FOUND_TEXT = '分類不存在，請重新記帳';
+
+/** 選擇的分類與帳本或收支不符（transaction/選擇分類完成記帳.feature）。 */
+export const PICK_CATEGORY_MISMATCH_TEXT = '分類不符，請重新記帳';

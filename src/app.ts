@@ -11,6 +11,7 @@ import { createRequestLogger } from './http/middleware/request-logger';
 import { createHealthRouter } from './http/routes/health';
 import { EventDispatcher } from './line/event-dispatcher';
 import { FollowHandler } from './line/handlers/follow-handler';
+import { PostbackHandler } from './line/handlers/postback-handler';
 import { TextMessageHandler } from './line/handlers/text-message-handler';
 import { createWebhookRouter } from './line/webhook-route';
 import { createLogger } from './logging/logger';
@@ -65,6 +66,7 @@ function createEventDispatcher(deps: AppDeps, logger: Logger): EventDispatcher {
     handlers: {
       follow: new FollowHandler(onboarding),
       message: new TextMessageHandler(transactions, logger),
+      postback: new PostbackHandler(transactions, logger),
     },
     logger,
   });

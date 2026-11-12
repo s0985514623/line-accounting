@@ -20,4 +20,19 @@ export class KeywordRepository {
     });
     return row?.category ?? null;
   }
+
+  /** 建立或改指向關鍵字（唯一鍵 ledger × entryType × keyword）：已存在則改指向 categoryId。 */
+  async upsert(
+    ledger: Ledger,
+    entryType: EntryType,
+    keyword: string,
+    categoryId: number,
+  ): Promise<void> {
+    await this.db.categoryKeyword.upsert({
+      where: { ledger_entryType_keyword: { ledger, entryType, keyword } },
+      create: { ledger, entryType, keyword, categoryId },
+      update: { categoryId },
+      select: { id: true },
+    });
+  }
 }

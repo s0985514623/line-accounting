@@ -15,6 +15,12 @@ export interface CategorySummary {
   isFallback: boolean;
 }
 
+/** 含帳本與收支的分類資料。 */
+export interface CategoryDetail extends CategorySummary {
+  ledger: Ledger;
+  entryType: EntryType;
+}
+
 const SUMMARY_SELECT = { id: true, name: true, isFallback: true } as const;
 
 export class CategoryRepository {
@@ -47,6 +53,14 @@ export class CategoryRepository {
     return this.db.category.findUnique({
       where: { ledger_entryType_name: { ledger, entryType, name } },
       select: SUMMARY_SELECT,
+    });
+  }
+
+  /** 依 id 取分類（含帳本、收支，供驗證歸屬）；不存在回 null。 */
+  findById(id: number): Promise<CategoryDetail | null> {
+    return this.db.category.findUnique({
+      where: { id },
+      select: { ...SUMMARY_SELECT, ledger: true, entryType: true },
     });
   }
 
