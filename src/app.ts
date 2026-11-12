@@ -1,15 +1,17 @@
 /**
  * Express app factory。所有外部依賴經 deps 注入（BDD / HTTP 測試注入固定時鐘、LINE stub、身分 stub）。
  */
+import path from 'node:path';
 import type { PrismaClient } from '@prisma/client';
 import express, { type Express } from 'express';
-import helmet from 'helmet';
 import type { Logger } from 'pino';
 import type { AppConfig } from './config/env';
 import { createErrorHandler } from './http/middleware/error-handler';
 import { createRequestLogger } from './http/middleware/request-logger';
+import { createSecurityHeaders } from './http/middleware/security-headers';
 import { API_PREFIX, createApiRouter } from './http/routes/api';
 import { createHealthRouter } from './http/routes/health';
+import { createLiffStaticRouter } from './http/routes/liff-static';
 import { EventDispatcher } from './line/event-dispatcher';
 import { FollowHandler } from './line/handlers/follow-handler';
 import { PostbackHandler } from './line/handlers/postback-handler';
@@ -32,7 +34,15 @@ export interface AppDeps {
   config: AppConfig;
   /** 未提供時依 config.logLevel 建立 */
   logger?: Logger;
+  /** LIFF 前端 build 產物目錄（index.html + assets/*）；未提供時為 {@link DEFAULT_WEB_DIST_DIR} */
+  webDistDir?: string;
 }
+
+/**
+ * 相對於本模組的 `../web/dist`：
+ * src/app.ts（tsx / 測試）→ <repo>/web/dist；dist/app.js（映像）→ /app/web/dist。
+ */
+export const DEFAULT_WEB_DIST_DIR = path.resolve(__dirname, '../web/dist');
 
 /** 由 route / handler 共用的 service（每個 app 各一組）。 */
 interface AppServices {
@@ -58,7 +68,7 @@ export function createApp(deps: AppDeps): Express {
   const app = express();
 
   app.disable('x-powered-by');
-  app.use(helmet());
+  app.use(createSecurityHeaders());
   app.use(createRequestLogger(logger));
 
   app.use(createHealthRouter(deps.prisma, logger));
@@ -79,6 +89,12 @@ export function createApp(deps: AppDeps): Express {
       transactions: services.transactions,
       reports: services.reports,
       clock: deps.clock,
+    }),
+  );
+  app.use(
+    createLiffStaticRouter({
+      webDistDir: deps.webDistDir ?? DEFAULT_WEB_DIST_DIR,
+      liffId: deps.config.liffId,
     }),
   );
 

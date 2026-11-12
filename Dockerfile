@@ -21,16 +21,20 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
 
-# ---- 建構：後端 TypeScript → dist/；LIFF 前端 → web/dist/（P8 前 web/ 尚不存在）----
+# ---- 建構：後端 TypeScript → dist/ ---------------------------------------------
 FROM deps AS build
 COPY . .
 RUN npx prisma generate \
- && npm run build \
- && if [ -f web/package.json ]; then \
-      npm --prefix web ci && npm --prefix web run build; \
-    else \
-      mkdir -p web/dist; \
-    fi
+ && npm run build
+
+# ---- 建構：LIFF 前端（Vite）→ /app/web/dist（P8.3；web/ 自成一包，不依賴根目錄）----
+FROM base AS web-build
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build \
+ && test -f dist/index.html
 
 # ---- 正式依賴（prisma CLI 在 dependencies：執行期 migrate deploy 用）-----------
 FROM base AS prod-deps
@@ -45,7 +49,7 @@ FROM base AS runtime
 ENV NODE_ENV=production PORT=3000
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/web/dist ./web/dist
+COPY --from=web-build /app/web/dist ./web/dist
 COPY prisma ./prisma
 COPY package.json ./
 # P2b：deploy/compose.yml 建立後於此加入 `COPY deploy/compose.yml ./deploy/compose.yml`（deploy.sh 由映像取出）

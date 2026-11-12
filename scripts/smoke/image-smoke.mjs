@@ -6,6 +6,7 @@
 // 流程：docker build -t la:smoke . -> 在 dev DB 容器內建立獨立的臨時 database
 //       -> 映像內 prisma migrate deploy / dist/cli/seed-defaults.js
 //       -> docker run -> 輪詢 /healthz 30 次 -> 驗 200
+//       -> 驗 GET /liff/ 為 200 HTML、GET /liff/config.json 為 200（P8.3）
 //       -> 驗 node 為 v24、容器以 node 使用者執行、映像不含 .env / specs / tests
 //       -> 無論成敗皆清除容器與臨時 database。
 //
@@ -209,6 +210,41 @@ async function main() {
     const logs = docker(['logs', '--tail', '50', APP_CONTAINER]);
     console.error(`${logs.stdout}${logs.stderr}`);
   }
+
+  // 4b. P8.3：LIFF 靜態檔（web build 產物須隨映像出貨）
+  const base = `http://127.0.0.1:${hostPort}`;
+  let liffStatus = 0;
+  let liffType = '';
+  let liffBody = '';
+  try {
+    const res = await fetch(`${base}/liff/`, { signal: AbortSignal.timeout(5000) });
+    liffStatus = res.status;
+    liffType = res.headers.get('content-type') ?? '';
+    liffBody = await res.text();
+  } catch {
+    // 連線失敗：狀態維持 0
+  }
+  check(
+    'GET /liff/ 回 200 且為 HTML',
+    liffStatus === 200 && /text\/html/.test(liffType) && /<html|<!doctype html/i.test(liffBody),
+    `狀態 ${liffStatus}，content-type ${liffType || '(無)'}`,
+  );
+
+  let cfgStatus = 0;
+  let cfgBody = '';
+  try {
+    const res = await fetch(`${base}/liff/config.json`, { signal: AbortSignal.timeout(5000) });
+    cfgStatus = res.status;
+    cfgBody = await res.text();
+  } catch {
+    // 連線失敗：狀態維持 0
+  }
+  check('GET /liff/config.json 回 200', cfgStatus === 200, `狀態 ${cfgStatus}`);
+  check(
+    '/liff/config.json 的 liffId 為執行期 LIFF_ID',
+    cfgBody.includes('1234567890-smokeliff'),
+    cfgBody.slice(0, 120),
+  );
 
   // 5. 映像內容檢查
   const nodeV = docker(['run', '--rm', '--entrypoint', 'node', IMAGE, '-v']).stdout.trim();
