@@ -73,3 +73,29 @@ export type TCategory = z.infer<typeof categorySchema>;
 export const categoryListSchema = z.object({
   items: z.array(categorySchema),
 });
+
+/** 月度統計的單一支出分類（ratio 為百分比，四捨五入至小數一位）。 */
+export const expenseByCategorySchema = z.object({
+  categoryName: z.string(),
+  amount: z.number().int(),
+  ratio: z.number(),
+});
+
+export const monthlyReportSchema = z.object({
+  ledger: ledgerSchema,
+  month: z.string(),
+  incomeTotal: z.number().int(),
+  expenseTotal: z.number().int(),
+  balance: z.number().int(),
+  expenseByCategory: z.array(expenseByCategorySchema),
+});
+
+export type TExpenseByCategory = z.infer<typeof expenseByCategorySchema>;
+export type TMonthlyReport = z.infer<typeof monthlyReportSchema>;
+
+/** POST /api/categories 的 body。 */
+export type TCategoryInput = {
+  ledger: TLedger;
+  entryType: TEntryType;
+  name: string;
+};

@@ -10,6 +10,15 @@ vi.mock('@line/liff', async () => ({
   default: (await import('./mocks/liff')).liffMock,
 }));
 
+// jsdom 沒有 ResizeObserver；Recharts 的 ResponsiveContainer 需要它（量不到尺寸時不渲染 SVG 內容，屬預期）
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {

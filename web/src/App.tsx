@@ -1,10 +1,17 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { ApiError } from './api/http';
+import { LoadingStatus } from './components/LoadingStatus';
+import { CategoryPage } from './pages/CategoryPage';
 import { TransactionFormPage } from './pages/TransactionFormPage';
 import { TransactionListPage } from './pages/TransactionListPage';
 import './styles/global.css';
+
+/** 圖表頁含 Recharts（體積大），延遲載入以縮短 LIFF 首頁開啟時間。 */
+const ChartPage = lazy(() =>
+  import('./pages/ChartPage').then((module) => ({ default: module.ChartPage })),
+);
 
 /** 只對暫時性錯誤（網路、5xx）自動重試一次；4xx 與 401（HTTP 層已處理）不重試。 */
 function shouldRetryQuery(failureCount: number, error: Error): boolean {
@@ -35,6 +42,15 @@ export function App() {
           <Route path="/" element={<TransactionListPage />} />
           <Route path="/new" element={<TransactionFormPage />} />
           <Route path="/edit/:id" element={<TransactionFormPage />} />
+          <Route path="/categories" element={<CategoryPage />} />
+          <Route
+            path="/chart"
+            element={
+              <Suspense fallback={<LoadingStatus />}>
+                <ChartPage />
+              </Suspense>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

@@ -108,6 +108,18 @@ export function TransactionListPage() {
         </Link>
       </header>
 
+      <nav aria-label="功能選單" className={styles.nav}>
+        <Link to="/categories" className={styles.navLink}>
+          分類管理
+        </Link>
+        <Link
+          to={{ pathname: '/chart', search: `?month=${month}&ledger=${ledger}` }}
+          className={styles.navLink}
+        >
+          統計圖表
+        </Link>
+      </nav>
+
       <section className={styles.filters}>
         <MonthPicker value={month} onChange={setMonth} />
         <LedgerToggle value={ledger} onChange={setLedger} />

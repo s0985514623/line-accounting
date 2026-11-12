@@ -315,4 +315,96 @@ export const handlers = [
     );
     return HttpResponse.json({ items });
   }),
+
+  // 新增分類（api.yml：201 / 400 INVALID_ARGUMENT / 409 DUPLICATE_NAME；名稱 trim 後 1–50 字）
+  http.post('*/api/categories', async ({ request }) => {
+    const denied = checkAuth(request);
+    if (denied) return denied;
+    const b = (await request
+      .clone()
+      .json()
+      .catch(() => undefined)) as Record<string, unknown> | undefined;
+    if (!b || !isLedger(b.ledger) || !isEntryType(b.entryType) || typeof b.name !== 'string') {
+      return errorResponse(400, 'INVALID_ARGUMENT');
+    }
+    const name = b.name.trim();
+    if (name.length < 1 || name.length > 50) return errorResponse(400, 'INVALID_ARGUMENT');
+    const duplicated = categories.some(
+      (c) => c.ledger === b.ledger && c.entryType === b.entryType && c.name === name,
+    );
+    if (duplicated) return errorResponse(409, 'DUPLICATE_NAME');
+    const created: CategoryRow = {
+      id: nextId++,
+      ledger: b.ledger,
+      entryType: b.entryType,
+      name,
+      isFallback: false,
+    };
+    categories.push(created);
+    return HttpResponse.json(created, { status: 201 });
+  }),
+
+  // 刪除分類（api.yml：204 / 404 / 422 FALLBACK_CATEGORY_UNDELETABLE）；
+  // 該分類的記帳紀錄改歸同帳本同收支的「其他」
+  http.delete('*/api/categories/:id', async ({ request, params }) => {
+    const denied = checkAuth(request);
+    if (denied) return denied;
+    const target = categories.find((c) => c.id === Number(params.id));
+    if (!target) return errorResponse(404, 'NOT_FOUND');
+    if (target.isFallback) return errorResponse(422, 'FALLBACK_CATEGORY_UNDELETABLE');
+    const fallback = categories.find(
+      (c) => c.isFallback && c.ledger === target.ledger && c.entryType === target.entryType,
+    )!;
+    for (const t of transactions) {
+      if (t.categoryId === target.id) {
+        t.categoryId = fallback.id;
+        t.categoryName = fallback.name;
+      }
+    }
+    categories = categories.filter((c) => c.id !== target.id);
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // 月度統計（api.yml：month / ledger 皆可省略；省略時為本月（Asia/Taipei）與 personal）
+  http.get('*/api/reports/monthly', async ({ request }) => {
+    const denied = checkAuth(request);
+    if (denied) return denied;
+    const url = new URL(request.url);
+    const monthParam = url.searchParams.get('month');
+    const ledgerParam = url.searchParams.get('ledger');
+    if (monthParam !== null && !MONTH_RE.test(monthParam)) {
+      return errorResponse(400, 'INVALID_ARGUMENT');
+    }
+    if (ledgerParam !== null && !isLedger(ledgerParam)) {
+      return errorResponse(400, 'INVALID_ARGUMENT');
+    }
+    const month = monthParam ?? new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 7);
+    const ledger: Ledger = ledgerParam ?? 'personal';
+    const inMonth = transactions.filter(
+      (t) => t.ledger === ledger && t.occurredOn.startsWith(`${month}-`),
+    );
+    const sum = (type: EntryType) =>
+      inMonth.filter((t) => t.entryType === type).reduce((acc, t) => acc + t.amount, 0);
+    const incomeTotal = sum('income');
+    const expenseTotal = sum('expense');
+    const byCategory = new Map<string, number>();
+    for (const t of inMonth.filter((x) => x.entryType === 'expense')) {
+      byCategory.set(t.categoryName, (byCategory.get(t.categoryName) ?? 0) + t.amount);
+    }
+    const expenseByCategory = [...byCategory.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([categoryName, amount]) => ({
+        categoryName,
+        amount,
+        ratio: Math.round((amount / expenseTotal) * 1000) / 10,
+      }));
+    return HttpResponse.json({
+      ledger,
+      month,
+      incomeTotal,
+      expenseTotal,
+      balance: incomeTotal - expenseTotal,
+      expenseByCategory,
+    });
+  }),
 ];

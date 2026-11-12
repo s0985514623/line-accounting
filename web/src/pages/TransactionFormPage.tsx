@@ -1,8 +1,9 @@
 import { useId, useRef, useState, type FormEvent } from 'react';
-import { Link, useLocation, useNavigate, useParams } from 'react-router';
+import { useLocation, useNavigate, useParams } from 'react-router';
 import { useCategories } from '../api/categories';
 import type { TEntryType, TLedger, TTransaction } from '../api/schemas';
 import { useSaveTransaction } from '../api/transactions';
+import { BackLink } from '../components/BackLink';
 import { CategorySelect } from '../components/CategorySelect';
 import { EntryTypeToggle } from '../components/EntryTypeToggle';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -206,9 +207,7 @@ export function TransactionFormPage() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <Link to="/" className={styles.backLink}>
-          返回列表
-        </Link>
+        <BackLink />
         <h1 className={styles.title}>{isEdit ? '編輯記帳' : '新增記帳'}</h1>
       </header>
 
