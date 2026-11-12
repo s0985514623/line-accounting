@@ -13,17 +13,25 @@
  *  → 回填 token.transactionId → 非 fallback 分類才 upsert 關鍵字。
  *  - token 已使用優先回 alreadyUsed；分類錯誤（不存在 / 帳本或收支不符）只讀不寫，token 不被消耗。
  *  - 併發時 insert token 撞 PK（P2002）→ 整段 rollback 並回 alreadyUsed；其他例外原樣拋出。
+ *
+ * findSummaryById / deleteById（implementation-plan P4；確認刪除記帳紀錄.feature）：
+ *  - id 不是 1..int4 上限的整數 → 視為不存在，不碰資料庫。
+ *  - deleteById 只執行一次 DELETE（以被刪除列組成結果）；P2025 → notFound，其他例外原樣拋出。
  */
 import { randomBytes } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { PickPayload } from '../domain/postback-codec';
 import { todayInTaipei } from '../domain/date-utils';
+import { isValidRecordId } from '../domain/record-id';
 import type { TextEntry } from '../domain/text-entry-parser';
 import type { Clock } from '../ports/clock';
 import { CategoryRepository, type CategorySummary } from '../repositories/category-repository';
 import { KeywordRepository } from '../repositories/keyword-repository';
 import { PostbackTokenRepository } from '../repositories/postback-token-repository';
-import { TransactionRepository } from '../repositories/transaction-repository';
+import {
+  TransactionRepository,
+  type TransactionSummary,
+} from '../repositories/transaction-repository';
 import { CategoryMatcher } from './category-matcher';
 import type { EnsureDefaultCategoriesResult } from './onboarding-service';
 
@@ -72,6 +80,19 @@ export type CompletePickResult =
   | { kind: 'categoryNotFound' }
   /** 分類存在但帳本或收支與 payload 不符 */
   | { kind: 'categoryMismatch' };
+
+export type { TransactionSummary };
+
+export type DeleteByIdResult =
+  | {
+      kind: 'deleted';
+      item: string;
+      amount: number;
+      /** YYYY-MM-DD */
+      occurredOn: string;
+    }
+  /** 紀錄不存在（含 id 不合法、重複確認刪除） */
+  | { kind: 'notFound' };
 
 /** 交易內 insert token 撞 PK 時拋出，用來讓整段交易 rollback 後轉成 alreadyUsed。 */
 class PickTokenConflictError extends Error {
@@ -192,6 +213,25 @@ export class TransactionService {
       transactionId,
       categoryName: category.name,
       occurredOn: payload.date,
+    };
+  }
+
+  /** 依 id 取紀錄摘要（刪除確認 / 取消用）；不存在或 id 不合法回 null。 */
+  async findSummaryById(id: number): Promise<TransactionSummary | null> {
+    if (!isValidRecordId(id)) return null;
+    return this.transactions.findSummaryById(id);
+  }
+
+  /** 刪除一筆記帳紀錄；不存在或 id 不合法回 notFound。 */
+  async deleteById(id: number): Promise<DeleteByIdResult> {
+    if (!isValidRecordId(id)) return { kind: 'notFound' };
+    const deleted = await this.transactions.deleteById(id);
+    if (!deleted) return { kind: 'notFound' };
+    return {
+      kind: 'deleted',
+      item: deleted.item,
+      amount: deleted.amount,
+      occurredOn: deleted.occurredOn,
     };
   }
 

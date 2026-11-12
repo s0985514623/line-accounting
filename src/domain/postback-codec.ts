@@ -6,12 +6,14 @@
  *    以免 URL 百分比編碼讓中文膨脹到每字 9 字元而超過 LINE 的 300 字元上限（ASM-05）。
  *  - pick 欄位順序固定：action, token, ledger, type, item, amount, date, note, categoryId
  *    （與 specs/features/transaction/選擇分類完成記帳.feature 的範例逐字一致）；note 為 null 編成 `note=`。
- *  - delete：`action=delete&id=<id>`。
+ *  - delete：`action=delete&id=<id>`；delete_confirm / delete_cancel：`action=delete_confirm&id=<id>`、
+ *    `action=delete_cancel&id=<id>`（請求刪除記帳紀錄.feature、確認刪除記帳紀錄.feature）。
  * 解碼：任何不合法（未知 action、缺欄位、多餘 / 重複欄位、值不合法）一律回 null，永不拋出（ASM-07）。
  */
 import { z } from 'zod';
 import { isValidDateOnly } from './date-utils';
 import { ENTRY_TYPES, LEDGERS, type EntryType, type Ledger } from './enums';
+import { MAX_INT4 } from './record-id';
 import { MAX_AMOUNT, MAX_ITEM_LENGTH } from './text-entry-parser';
 
 /** LINE postback action data 上限（以字串 .length 計）。 */
@@ -19,8 +21,6 @@ export const POSTBACK_DATA_MAX_LENGTH = 300;
 
 /** 一次性分類按鈕 token 的最大長度（對應 postback_tokens.token VarChar(64)）。 */
 const MAX_TOKEN_LENGTH = 64;
-/** PostgreSQL int4 上限（categories.id / transactions.id）。 */
-const MAX_INT4 = 2_147_483_647;
 
 export interface PickPayload {
   token: string;
@@ -34,7 +34,12 @@ export interface PickPayload {
   categoryId: number;
 }
 
-export type PostbackPayload = ({ action: 'pick' } & PickPayload) | { action: 'delete'; id: number };
+/** 以紀錄 id 為唯一欄位的刪除流程 action。 */
+export const RECORD_ACTIONS = ['delete', 'delete_confirm', 'delete_cancel'] as const;
+export type RecordAction = (typeof RECORD_ACTIONS)[number];
+
+export type PostbackPayload =
+  ({ action: 'pick' } & PickPayload) | { action: RecordAction; id: number };
 
 export function isPostbackDataWithinLimit(data: string): boolean {
   return data.length <= POSTBACK_DATA_MAX_LENGTH;
@@ -81,12 +86,26 @@ export function encodePick(payload: PickPayload): string {
   ]);
 }
 
-/** 編碼「刪除」按鈕 data。 */
-export function encodeDelete(id: number): string {
+function encodeRecordAction(action: RecordAction, id: number): string {
   return encodePairs([
-    ['action', 'delete'],
+    ['action', action],
     ['id', String(id)],
   ]);
+}
+
+/** 編碼「刪除」按鈕 data。 */
+export function encodeDelete(id: number): string {
+  return encodeRecordAction('delete', id);
+}
+
+/** 編碼刪除確認提示的「確定」按鈕 data。 */
+export function encodeConfirm(id: number): string {
+  return encodeRecordAction('delete_confirm', id);
+}
+
+/** 編碼刪除確認提示的「取消」按鈕 data。 */
+export function encodeCancel(id: number): string {
+  return encodeRecordAction('delete_cancel', id);
 }
 
 // ---- 解碼 ------------------------------------------------------------------------------------
@@ -131,19 +150,21 @@ const PickSchema = z
     categoryId: raw.categoryId,
   }));
 
-const DeleteSchema = z
-  .strictObject({
-    action: z.literal('delete'),
-    id: positiveIntString(MAX_INT4),
-  })
-  .transform((raw): PostbackPayload => ({ action: 'delete', id: raw.id }));
+function recordActionSchema(action: RecordAction): z.ZodType<PostbackPayload> {
+  return z
+    .strictObject({
+      action: z.literal(action),
+      id: positiveIntString(MAX_INT4),
+    })
+    .transform((raw): PostbackPayload => ({ action, id: raw.id }));
+}
 
 const SCHEMAS_BY_ACTION: ReadonlyMap<string, z.ZodType<PostbackPayload>> = new Map<
   string,
   z.ZodType<PostbackPayload>
 >([
   ['pick', PickSchema],
-  ['delete', DeleteSchema],
+  ...RECORD_ACTIONS.map((action) => [action, recordActionSchema(action)] as const),
 ]);
 
 /** 切成 key → value（已反跳脫）；格式錯誤或 key 重複回 null。以 Map 承接，避免 `__proto__` 之類的 key 汙染物件。 */

@@ -38,3 +38,9 @@ export const PICK_CATEGORY_NOT_FOUND_TEXT = '分類不存在，請重新記帳';
 
 /** 選擇的分類與帳本或收支不符（transaction/選擇分類完成記帳.feature）。 */
 export const PICK_CATEGORY_MISMATCH_TEXT = '分類不符，請重新記帳';
+
+/** 要刪除 / 取消刪除的記帳紀錄不存在（transaction/請求刪除記帳紀錄.feature、確認刪除記帳紀錄.feature）。 */
+export const RECORD_NOT_FOUND_TEXT = '此紀錄已不存在';
+
+/** 刪除確認提示選擇「取消」（transaction/確認刪除記帳紀錄.feature）。 */
+export const DELETE_CANCELLED_TEXT = '已取消刪除';

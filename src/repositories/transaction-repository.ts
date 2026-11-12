@@ -1,8 +1,9 @@
 /**
  * 記帳紀錄資料存取（Repository）。日期以 'YYYY-MM-DD' 進出，只在此邊界轉換為 Date（R11）。
  */
+import { Prisma } from '@prisma/client';
 import type { EntrySource, EntryType, Ledger } from '../domain/enums';
-import { parseDateOnly } from '../db/date-only';
+import { formatDateOnly, parseDateOnly } from '../db/date-only';
 import type { DbClient } from './category-repository';
 
 export interface NewTransaction {
@@ -15,6 +16,38 @@ export interface NewTransaction {
   occurredOn: string;
   note: string | null;
   source: EntrySource;
+}
+
+/** 刪除流程顯示用的紀錄摘要。 */
+export interface TransactionSummary {
+  id: number;
+  item: string;
+  amount: number;
+  /** YYYY-MM-DD */
+  occurredOn: string;
+}
+
+const SUMMARY_SELECT = { id: true, item: true, amount: true, occurredOn: true } as const;
+
+interface SummaryRow {
+  id: number;
+  item: string;
+  amount: number;
+  occurredOn: Date;
+}
+
+function toSummary(row: SummaryRow): TransactionSummary {
+  return {
+    id: row.id,
+    item: row.item,
+    amount: row.amount,
+    occurredOn: formatDateOnly(row.occurredOn),
+  };
+}
+
+/** Prisma「操作的紀錄不存在」（delete / update 找不到列）。 */
+function isRecordNotFound(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
 }
 
 export class TransactionRepository {
@@ -35,5 +68,25 @@ export class TransactionRepository {
       },
       select: { id: true },
     });
+  }
+
+  /** 依 id 取紀錄摘要；不存在回 null。 */
+  async findSummaryById(id: number): Promise<TransactionSummary | null> {
+    const row = await this.db.transaction.findUnique({ where: { id }, select: SUMMARY_SELECT });
+    return row ? toSummary(row) : null;
+  }
+
+  /**
+   * 以單一 DELETE 刪除並回傳被刪除列的摘要（不先查再刪，避免 TOCTOU）。
+   * 紀錄不存在（P2025）回 null；其他例外原樣拋出。
+   */
+  async deleteById(id: number): Promise<TransactionSummary | null> {
+    try {
+      const row = await this.db.transaction.delete({ where: { id }, select: SUMMARY_SELECT });
+      return toSummary(row);
+    } catch (error) {
+      if (isRecordNotFound(error)) return null;
+      throw error;
+    }
   }
 }
