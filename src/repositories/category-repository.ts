@@ -72,4 +72,14 @@ export class CategoryRepository {
       select: SUMMARY_SELECT,
     });
   }
+
+  /** 依 id 批次取分類名稱（id → name）；不存在的 id 不在結果中。 */
+  async findNamesByIds(ids: readonly number[]): Promise<Map<number, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.db.category.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
 }

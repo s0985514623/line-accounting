@@ -45,6 +45,19 @@ function toSummary(row: SummaryRow): TransactionSummary {
   };
 }
 
+/** 依 (收支, 分類) 彙總的金額。 */
+export interface CategoryAmountTotal {
+  entryType: EntryType;
+  categoryId: number;
+  amount: number;
+}
+
+/** 'YYYY-MM-DD' 半開區間 [start, endExclusive)。 */
+export interface DateOnlyRange {
+  start: string;
+  endExclusive: string;
+}
+
 /** Prisma「操作的紀錄不存在」（delete / update 找不到列）。 */
 function isRecordNotFound(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
@@ -88,5 +101,23 @@ export class TransactionRepository {
       if (isRecordNotFound(error)) return null;
       throw error;
     }
+  }
+
+  /** 指定帳本、日期區間 [start, endExclusive) 內，依 (收支, 分類) 彙總金額。 */
+  async sumByCategory(ledger: Ledger, range: DateOnlyRange): Promise<CategoryAmountTotal[]> {
+    const groups = await this.db.transaction.groupBy({
+      by: ['entryType', 'categoryId'],
+      where: {
+        ledger,
+        occurredOn: { gte: parseDateOnly(range.start), lt: parseDateOnly(range.endExclusive) },
+      },
+      _sum: { amount: true },
+      orderBy: [{ entryType: 'asc' }, { categoryId: 'asc' }],
+    });
+    return groups.map((group) => ({
+      entryType: group.entryType,
+      categoryId: group.categoryId,
+      amount: group._sum.amount ?? 0,
+    }));
   }
 }

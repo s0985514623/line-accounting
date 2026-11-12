@@ -19,6 +19,7 @@ import type { Clock } from './ports/clock';
 import type { IdTokenVerifier } from './ports/id-token-verifier';
 import type { LineReplyGateway } from './ports/line-reply-gateway';
 import { OnboardingService } from './services/onboarding-service';
+import { ReportService } from './services/report-service';
 import { TransactionService } from './services/transaction-service';
 
 export interface AppDeps {
@@ -65,7 +66,12 @@ function createEventDispatcher(deps: AppDeps, logger: Logger): EventDispatcher {
     gateway: deps.lineGateway,
     handlers: {
       follow: new FollowHandler(onboarding),
-      message: new TextMessageHandler(transactions, logger),
+      message: new TextMessageHandler({
+        transactions,
+        reports: new ReportService(deps.prisma),
+        clock: deps.clock,
+        liffId: deps.config.liffId,
+      }),
       postback: new PostbackHandler(transactions, logger),
     },
     logger,

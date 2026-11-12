@@ -16,7 +16,7 @@
 | Git | 已 `git init`，分支 `main`，**尚無任何 commit** | §1.4 前置：先建立基準 commit（specs + plans） |
 | OS | Windows 11；主窗口 Bash 工具為 Git Bash | Gate 指令一律用 POSIX 語法；`.gitattributes` 強制 LF（R16） |
 | Node | 本機目前 **v22.18.0** | **P0 開工前必須安裝 Node 24 LTS**（見 §1.3） |
-| Docker | Docker 29.4.0（Docker Desktop） | BDD 測試 DB 使用 `docker-compose.dev.yml`（port 5433）；Testcontainers 為備援 |
+| Docker | Docker 29.4.0（Docker Desktop） | BDD 測試 DB 使用 `docker-compose.dev.yml`（port 5434；5433 被他專案占用）；Testcontainers 為備援 |
 | specs | 完整：14 個 `.feature`、`erm.dbml`、`api.yml`、4 份句型.md、系統抽象.md | 採**規格驅動 TDD 模式**；cucumber 直接讀 `specs/features/**`，**任何 agent 不得修改 `specs/`** |
 | milestones | `specs/milestones/` 不存在 | §7 步驟 0（milestone 同步）略過 |
 | CLAUDE.md / .claude/rules | 不存在 | 收尾由 doc-updater 首次建立 |
@@ -78,10 +78,10 @@
 
 ### 0.2 測試 DB
 
-- 本機一律用 `docker compose -f docker-compose.dev.yml up -d` 起的 Postgres（port 5433），提供**獨立的 test database**（BDD 會 TRUNCATE，不可與開發資料共用）。
+- 本機一律用 `docker compose -f docker-compose.dev.yml up -d` 起的 Postgres（port 5434；5433 被他專案占用），提供**獨立的 test database**（BDD 會 TRUNCATE，不可與開發資料共用）。
 - 所有 Gate 指令以下列前綴執行（Bash 工具的 shell 狀態不保留，每次呼叫都要帶）：
   ```bash
-  cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5433/test
+  cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5434/test
   ```
 
 ### 0.3 標準 Gate 指令
@@ -206,7 +206,7 @@ Green 通過條件：四個 EXIT 全部為 0；cucumber 摘要為 `N scenarios (
 #### 🚨 Red Gate（主窗口親跑）
 
 ```bash
-cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5433/test
+cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5434/test
 node -v; npx prisma -v 2>&1 | head -3; echo "PRISMA_EXIT=${PIPESTATUS[0]}"     # 環境：Node 24、prisma CLI 可執行
 docker compose -f docker-compose.dev.yml up -d; echo "COMPOSE_EXIT=$?"
 ls tests/unit/config/env.test.ts tests/http/health.test.ts tests/db/schema-constraints.test.ts tests/bdd/support/world.ts
@@ -237,7 +237,7 @@ npm run test:unit 2>&1 | tail -40; echo "UNIT_EXIT=${PIPESTATUS[0]}"
 #### 🚨 Green Gate（主窗口親跑）
 
 ```bash
-cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5433/test
+cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5434/test
 DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy 2>&1 | tail -5; echo "MIGRATE_EXIT=${PIPESTATUS[0]}"
 npm run typecheck; echo "TYPECHECK_EXIT=$?"
 npm run lint; echo "LINT_EXIT=$?"
@@ -524,7 +524,7 @@ npm --prefix web run build 2>&1 | tail -10; echo "WEB_BUILD_EXIT=${PIPESTATUS[0]
 0. **Milestone 同步**：`specs/milestones/` 不存在 → 略過。
 1. 主窗口跑最終 Green Gate（貼完整證據）：
    ```bash
-   cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5433/test
+   cd /d/Dev/line-accounting && export TEST_DATABASE_URL=postgresql://test:test@localhost:5434/test
    npm run typecheck; echo "TYPECHECK_EXIT=$?"
    npm run lint; echo "LINT_EXIT=$?"
    npm run test:unit 2>&1 | tail -25; echo "UNIT_EXIT=${PIPESTATUS[0]}"

@@ -10,14 +10,15 @@
  *     超過 MAX_AMOUNT → amountTooLarge（ASM-03）。項目（NFKC 後）超過 MAX_ITEM_LENGTH → itemTooLong（ASM-04）。
  *  6. 金額後其餘詞以單一空白 join 為備註；無備註 → null。
  */
+import type { SummaryPeriod } from './date-utils';
 import type { EntryType, Ledger } from './enums';
+
+export type { SummaryPeriod } from './date-utils';
 
 /** 金額上限（ASM-03）。 */
 export const MAX_AMOUNT = 99_999_999;
 /** 項目最多字數（ASM-04；對應 DB VarChar(50)）。 */
 export const MAX_ITEM_LENGTH = 50;
-
-export type SummaryPeriod = 'this_month' | 'last_month';
 
 export type ParseResult =
   | {
