@@ -1,0 +1,88 @@
+%% ═══ 區段一：Activity 標頭與 Actor 宣告 ═══
+%% [ACTIVITY] LINE 快速記帳
+%% [ACTOR] 記帳者 -> {specs/actors/記帳者.md}
+%% [ACTOR] 訪客 -> {specs/actors/訪客.md}
+
+flowchart TD
+
+%% ═══ 區段二：節點定義 ═══
+
+    Start(( ))
+
+    %% [STEP:1] @記帳者 {features/access/加入好友.feature}
+    S1["@記帳者<br/>加入 Bot 好友"]
+
+    %% [DECISION:1a] LINE userId 是否在白名單
+    D1a{"LINE userId 是否在白名單"}
+
+    %% [BRANCH:1a:否] @訪客 {features/access/加入好友.feature}
+    B1a_no["@訪客<br/>收到「不開放」回覆"]
+
+    %% [BRANCH:1a:是] @記帳者 {features/access/加入好友.feature}
+    B1a_yes["@記帳者<br/>收到歡迎訊息，個人與公司帳本建立預設分類"]
+
+    %% [STEP:2] @記帳者 {features/transaction/以文字訊息記帳.feature}
+    S2["@記帳者<br/>傳送記帳文字訊息"]
+
+    %% [DECISION:2a] 第一個詞是否對應到該帳本的分類
+    D2a{"第一個詞是否對應到該帳本的分類"}
+
+    %% [BRANCH:2a:對應到] @記帳者 {features/transaction/以文字訊息記帳.feature}
+    B2a_hit["@記帳者<br/>直接記帳，收到結果與刪除按鈕"]
+
+    %% [BRANCH:2a:對應不到] @記帳者 {features/transaction/選擇分類完成記帳.feature}
+    B2a_miss["@記帳者<br/>點選分類按鈕完成記帳"]
+
+    %% [MERGE:2a]
+    M2a(( ))
+
+    %% [DECISION:2b] 是否點擊刪除按鈕
+    D2b{"是否點擊刪除按鈕"}
+
+    %% [BRANCH:2b:點擊] @記帳者 {features/transaction/請求刪除記帳紀錄.feature}
+    B2b_del["@記帳者<br/>點刪除按鈕，收到「確定刪除？」確認"]
+
+    %% [DECISION:2b1] 是否確定刪除
+    D2b1{"是否確定刪除"}
+
+    %% [BRANCH:2b1:確定] @記帳者 {features/transaction/確認刪除記帳紀錄.feature}
+    B2b1_yes["@記帳者<br/>確定刪除，紀錄被刪除"]
+
+    %% [BRANCH:2b1:取消] @記帳者 {features/transaction/確認刪除記帳紀錄.feature}
+    B2b1_no["@記帳者<br/>取消刪除，紀錄保留"]
+
+    %% [MERGE:2b1]
+    M2b1(( ))
+
+    %% [BRANCH:2b:不點擊]
+    B2b_keep["保留紀錄"]
+
+    %% [MERGE:2b]
+    M2b(( ))
+
+    End((( )))
+
+%% ═══ 區段三：邊定義 ═══
+
+    Start --> S1
+    S1 --> D1a
+    D1a -- 否 --> B1a_no
+    B1a_no --> End
+    D1a -- 是 --> B1a_yes
+    B1a_yes --> S2
+    S2 --> D2a
+    D2a -- 對應到 --> B2a_hit
+    D2a -- 對應不到 --> B2a_miss
+    B2a_hit --> M2a
+    B2a_miss --> M2a
+    M2a --> D2b
+    D2b -- 點擊 --> B2b_del
+    D2b -- 不點擊 --> B2b_keep
+    B2b_del --> D2b1
+    D2b1 -- 確定 --> B2b1_yes
+    D2b1 -- 取消 --> B2b1_no
+    B2b1_yes --> M2b1
+    B2b1_no --> M2b1
+    M2b1 --> M2b
+    B2b_keep --> M2b
+    M2b --> End

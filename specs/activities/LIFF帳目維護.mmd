@@ -1,0 +1,62 @@
+%% ═══ 區段一：Activity 標頭與 Actor 宣告 ═══
+%% [ACTIVITY] LIFF 帳目維護
+%% [ACTOR] 記帳者 -> {specs/actors/記帳者.md}
+
+flowchart TD
+
+%% ═══ 區段二：節點定義 ═══
+
+    Start(( ))
+
+    %% [STEP:1] @記帳者 {features/transaction/查詢記帳紀錄列表.feature}
+    S1["@記帳者<br/>開啟 LIFF 查看記帳紀錄列表"]
+
+    %% [FORK:1a] 列表頁可進行的操作
+    F1a[["並行"]]
+
+    %% [PARALLEL:1a1] @記帳者 {features/transaction/以表單記帳.feature}
+    P1a_1["@記帳者<br/>以表單新增記帳"]
+
+    %% [PARALLEL:1a2] @記帳者 {features/transaction/編輯記帳紀錄.feature}
+    P1a_2["@記帳者<br/>編輯記帳紀錄"]
+
+    %% [PARALLEL:1a3] @記帳者 {features/transaction/刪除記帳紀錄.feature}
+    P1a_3["@記帳者<br/>刪除記帳紀錄"]
+
+    %% [JOIN:1a]
+    J1a(( ))
+
+    %% [STEP:2] @記帳者 {features/category/查詢分類列表.feature}
+    S2["@記帳者<br/>開啟分類管理查看分類"]
+
+    %% [FORK:2a] 分類管理操作
+    F2a[["並行"]]
+
+    %% [PARALLEL:2a1] @記帳者 {features/category/新增分類.feature}
+    P2a_1["@記帳者<br/>新增分類"]
+
+    %% [PARALLEL:2a2] @記帳者 {features/category/刪除分類.feature}
+    P2a_2["@記帳者<br/>刪除分類"]
+
+    %% [JOIN:2a]
+    J2a(( ))
+
+    End((( )))
+
+%% ═══ 區段三：邊定義 ═══
+
+    Start --> S1
+    S1 --> F1a
+    F1a --> P1a_1
+    F1a --> P1a_2
+    F1a --> P1a_3
+    P1a_1 --> J1a
+    P1a_2 --> J1a
+    P1a_3 --> J1a
+    J1a --> S2
+    S2 --> F2a
+    F2a --> P2a_1
+    F2a --> P2a_2
+    P2a_1 --> J2a
+    P2a_2 --> J2a
+    J2a --> End

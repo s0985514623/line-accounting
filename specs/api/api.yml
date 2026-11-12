@@ -1,0 +1,428 @@
+openapi: 3.0.0
+info:
+  title: LINE 記帳 API
+  version: 1.0.0
+  description: |
+    單一使用者 LINE 記帳。兩個入口：
+    1. LINE Messaging API webhook（POST /webhook/line）—— follow / message(text) / postback 事件
+    2. LIFF 前端 REST API（/api/*）—— Authorization: Bearer <LIFF ID token>，伺服器向 LINE 驗證後比對白名單 LINE_OWNER_USER_ID
+    時區固定 Asia/Taipei；金額為新台幣正整數。
+
+servers:
+  - url: https://{domain}
+    variables:
+      domain:
+        default: example.com
+        description: 共用 Caddy 反向代理的網域
+
+tags:
+  - name: webhook
+  - name: transactions
+  - name: categories
+  - name: reports
+
+paths:
+  /webhook/line:
+    post:
+      tags: [webhook]
+      operationId: handleLineWebhook
+      summary: LINE webhook（加入好友、文字記帳、選擇分類、請求刪除、確認刪除、月度文字摘要）
+      description: |
+        以 x-line-signature（HMAC-SHA256，channel secret）驗證；驗證失敗回 401 且不處理任何事件。
+        事件分派：
+        - follow → 加入好友（access/加入好友.feature）
+        - message(text) 完全等於「本月」「上月」「公 本月」「公 上月」→ 查詢月度文字摘要（report/查詢月度文字摘要.feature）
+        - message(text) 其他 → 以文字訊息記帳（transaction/以文字訊息記帳.feature）
+        - postback action=pick → 選擇分類完成記帳
+        - postback action=delete → 請求刪除記帳紀錄
+        - postback action=delete_confirm / delete_cancel → 確認刪除記帳紀錄
+        非白名單 userId：follow 與 message 回覆「此服務不開放使用」；postback 不回覆。
+        回覆一律使用 Reply API；業務結果不反映在 HTTP 回應（皆回 200）。
+      parameters:
+        - name: x-line-signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LineWebhookBody'
+      responses:
+        '200':
+          description: 已接收並處理
+        '401':
+          description: 簽章驗證失敗
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/transactions:
+    get:
+      tags: [transactions]
+      operationId: listTransactions
+      summary: 查詢記帳紀錄列表
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: month
+          in: query
+          required: true
+          schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$', example: '2026-11' }
+        - name: ledger
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Ledger' }
+      responses:
+        '200':
+          description: 依日期新到舊、同日 id 大到小
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transaction' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [transactions]
+      operationId: createTransaction
+      summary: 以表單記帳
+      security: [{ liffIdToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionInput' }
+      responses:
+        '201':
+          description: 建立成功（source = liff_form）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '400':
+          description: INVALID_ARGUMENT 或 CATEGORY_MISMATCH
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/transactions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [transactions]
+      operationId: updateTransaction
+      summary: 編輯記帳紀錄（全欄位更新，source 不變）
+      security: [{ liffIdToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionInput' }
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '400':
+          description: INVALID_ARGUMENT 或 CATEGORY_MISMATCH
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [transactions]
+      operationId: deleteTransaction
+      summary: 刪除記帳紀錄（硬刪除）
+      security: [{ liffIdToken: [] }]
+      responses:
+        '204':
+          description: 刪除成功
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/categories:
+    get:
+      tags: [categories]
+      operationId: listCategories
+      summary: 查詢分類列表（一般分類依 id，「其他」排最後）
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: ledger
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/Ledger' }
+        - name: entryType
+          in: query
+          required: true
+          schema: { $ref: '#/components/schemas/EntryType' }
+      responses:
+        '200':
+          description: 分類清單
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Category' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [categories]
+      operationId: createCategory
+      summary: 新增分類
+      security: [{ liffIdToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CategoryInput' }
+      responses:
+        '201':
+          description: 建立成功（isFallback = false）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Category' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: DUPLICATE_NAME
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/categories/{id}:
+    delete:
+      tags: [categories]
+      operationId: deleteCategory
+      summary: 刪除分類（紀錄改歸同帳本同收支「其他」，關鍵字一併刪除）
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: 刪除成功
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: FALLBACK_CATEGORY_UNDELETABLE
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/reports/monthly:
+    get:
+      tags: [reports]
+      operationId: getMonthlyReport
+      summary: 查詢月度統計圖表
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: month
+          in: query
+          required: false
+          description: 省略時為本月（Asia/Taipei）
+          schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$', example: '2026-11' }
+        - name: ledger
+          in: query
+          required: false
+          description: 省略時為 personal
+          schema: { $ref: '#/components/schemas/Ledger' }
+      responses:
+        '200':
+          description: 月度統計
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MonthlyReport' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+components:
+  securitySchemes:
+    liffIdToken:
+      type: http
+      scheme: bearer
+      description: LIFF ID token（liff.getIDToken()），伺服器呼叫 LINE verify endpoint 驗證並取得 sub（userId）
+
+  responses:
+    InvalidArgument:
+      description: INVALID_ARGUMENT
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthenticated:
+      description: UNAUTHENTICATED（LIFF ID token 無效或缺少）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: FORBIDDEN（userId 不在白名單）
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: NOT_FOUND
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [message, violationType]
+      properties:
+        message: { type: string }
+        violationType:
+          type: string
+          enum:
+            - UNAUTHENTICATED
+            - FORBIDDEN
+            - INVALID_ARGUMENT
+            - NOT_FOUND
+            - CATEGORY_MISMATCH
+            - DUPLICATE_NAME
+            - FALLBACK_CATEGORY_UNDELETABLE
+
+    Ledger:
+      type: string
+      enum: [personal, company]
+      description: personal = 個人，company = 公司
+
+    EntryType:
+      type: string
+      enum: [expense, income]
+      description: expense = 支出，income = 收入
+
+    EntrySource:
+      type: string
+      enum: [line_text, liff_form]
+
+    TransactionInput:
+      type: object
+      required: [ledger, entryType, item, amount, categoryId, occurredOn]
+      properties:
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        item: { type: string, minLength: 1, maxLength: 50, example: 午餐 }
+        amount: { type: integer, minimum: 1, example: 120 }
+        categoryId: { type: integer, example: 1 }
+        occurredOn: { type: string, format: date, example: '2026-11-10' }
+        note: { type: string, nullable: true, example: 和朋友 }
+
+    Transaction:
+      type: object
+      required: [id, ledger, entryType, item, amount, categoryId, categoryName, occurredOn, note, source]
+      properties:
+        id: { type: integer, example: 10 }
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        item: { type: string, example: 午餐 }
+        amount: { type: integer, example: 120 }
+        categoryId: { type: integer, example: 1 }
+        categoryName: { type: string, example: 餐飲 }
+        occurredOn: { type: string, format: date, example: '2026-11-12' }
+        note: { type: string, nullable: true }
+        source: { $ref: '#/components/schemas/EntrySource' }
+
+    CategoryInput:
+      type: object
+      required: [ledger, entryType, name]
+      properties:
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        name: { type: string, minLength: 1, maxLength: 50, description: 去除前後空白後不可為空, example: 寵物 }
+
+    Category:
+      type: object
+      required: [id, ledger, entryType, name, isFallback]
+      properties:
+        id: { type: integer, example: 1 }
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        name: { type: string, example: 餐飲 }
+        isFallback: { type: boolean, description: 是否為「其他」分類 }
+
+    MonthlyReport:
+      type: object
+      required: [ledger, month, incomeTotal, expenseTotal, balance, expenseByCategory]
+      properties:
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        month: { type: string, example: '2026-11' }
+        incomeTotal: { type: integer, example: 50000 }
+        expenseTotal: { type: integer, example: 400 }
+        balance: { type: integer, example: 49600, description: incomeTotal - expenseTotal }
+        expenseByCategory:
+          type: array
+          description: 依金額由大到小；無支出時為空陣列
+          items:
+            type: object
+            required: [categoryName, amount, ratio]
+            properties:
+              categoryName: { type: string, example: 餐飲 }
+              amount: { type: integer, example: 300 }
+              ratio: { type: number, example: 75.0, description: 百分比，四捨五入至小數一位 }
+
+    LineWebhookBody:
+      type: object
+      required: [destination, events]
+      description: LINE Messaging API webhook 標準格式（僅列出本系統使用的欄位）
+      properties:
+        destination: { type: string }
+        events:
+          type: array
+          items: { $ref: '#/components/schemas/LineEvent' }
+
+    LineEvent:
+      type: object
+      required: [type, source, timestamp]
+      properties:
+        type:
+          type: string
+          enum: [follow, message, postback, unfollow]
+          description: unfollow 及其他類型忽略
+        replyToken: { type: string }
+        timestamp: { type: integer }
+        source:
+          type: object
+          required: [type, userId]
+          properties:
+            type: { type: string, enum: [user] }
+            userId: { type: string }
+        message:
+          type: object
+          description: type=message 時存在；僅處理 text
+          properties:
+            type: { type: string }
+            text: { type: string }
+        postback:
+          type: object
+          description: |
+            type=postback 時存在。data 格式：
+            - action=pick&token=&ledger=&type=&item=&amount=&date=&note=&categoryId=
+            - action=delete&id=
+            - action=delete_confirm&id= / action=delete_cancel&id=
+          properties:
+            data: { type: string }

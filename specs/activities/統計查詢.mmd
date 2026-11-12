@@ -1,0 +1,36 @@
+%% ═══ 區段一：Activity 標頭與 Actor 宣告 ═══
+%% [ACTIVITY] 統計查詢
+%% [ACTOR] 記帳者 -> {specs/actors/記帳者.md}
+
+flowchart TD
+
+%% ═══ 區段二：節點定義 ═══
+
+    Start(( ))
+
+    %% [STEP:1] @記帳者 {features/report/查詢月度文字摘要.feature}
+    S1["@記帳者<br/>打「本月」「上月」或點 Rich Menu 取得月度文字摘要"]
+
+    %% [DECISION:1a] 是否需要看圖表
+    D1a{"是否需要看圖表"}
+
+    %% [BRANCH:1a:需要] @記帳者 {features/report/查詢月度統計圖表.feature}
+    B1a_chart["@記帳者<br/>點連結開啟 LIFF 圖表頁"]
+
+    %% [BRANCH:1a:不需要]
+    B1a_done["結束"]
+
+    %% [MERGE:1a]
+    M1a(( ))
+
+    End((( )))
+
+%% ═══ 區段三：邊定義 ═══
+
+    Start --> S1
+    S1 --> D1a
+    D1a -- 需要 --> B1a_chart
+    D1a -- 不需要 --> B1a_done
+    B1a_chart --> M1a
+    B1a_done --> M1a
+    M1a --> End
