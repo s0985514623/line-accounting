@@ -3,23 +3,16 @@
  */
 import type { Server } from 'node:http';
 import { messagingApi } from '@line/bot-sdk';
+import { LineIdTokenVerifier } from './adapters/line-id-token-verifier';
 import { LineMessagingGateway } from './adapters/line-messaging-gateway';
 import { SystemClock } from './adapters/system-clock';
 import { createApp } from './app';
 import { EnvValidationError, loadEnv, toAppConfig } from './config/env';
 import { disconnectPrismaClient, getPrismaClient } from './db/prisma';
 import { createLogger } from './logging/logger';
-import type { IdTokenVerifier } from './ports/id-token-verifier';
 
 /** 等待進行中請求的上限；逾時強制結束。 */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
-
-// LIFF 驗證尚無真實 adapter（P6：line-id-token-verifier）。在接上之前明確失敗，避免靜默放行。
-const pendingIdTokenVerifier: IdTokenVerifier = {
-  verify: async () => {
-    throw new Error('ID token verifier 尚未實作（P6）');
-  },
-};
 
 function main(): void {
   let env;
@@ -43,7 +36,7 @@ function main(): void {
       new messagingApi.MessagingApiClient({ channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN }),
       logger,
     ),
-    idTokenVerifier: pendingIdTokenVerifier,
+    idTokenVerifier: new LineIdTokenVerifier({ channelId: config.lineLoginChannelId }),
     config,
     logger,
   });

@@ -18,3 +18,12 @@ export class InvalidTokenError extends Error {
     super(message);
   }
 }
+
+/** LINE 驗證服務暫時無法使用：逾時、5xx、網路錯誤（→ HTTP 503，ASM-12）。 */
+export class VerifierUnavailableError extends Error {
+  override readonly name = 'VerifierUnavailableError';
+
+  constructor(message = 'LINE 驗證服務暫時無法使用', options?: { cause?: unknown }) {
+    super(message, options);
+  }
+}

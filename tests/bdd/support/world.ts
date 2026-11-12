@@ -73,9 +73,15 @@ export class TestWorld extends World {
     return supertest(await this.getApp());
   }
 
-  /** LIFF 請求的 Authorization header；未設定身分時為空物件。 */
+  /**
+   * LIFF 請求的 Authorization header；未設定身分時為空物件。
+   * identity 以 encodeURIComponent 編碼：`(無效token)` 含非 Latin-1 字元，直接放進 HTTP header 會被 Node 拒絕；
+   * StubIdTokenVerifier 會解碼還原（真實 ID token 為 ASCII JWT，不受影響）。
+   */
   liffAuthHeaders(): Record<string, string> {
-    return this.liffIdentity === null ? {} : { Authorization: `Bearer ${this.liffIdentity}` };
+    return this.liffIdentity === null
+      ? {}
+      : { Authorization: `Bearer ${encodeURIComponent(this.liffIdentity)}` };
   }
 }
 

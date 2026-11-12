@@ -139,13 +139,20 @@ export const INVALID_TOKEN_IDENTITY = '(無效token)';
  */
 export class StubIdTokenVerifier {
   async verify(idToken: string): Promise<{ sub: string }> {
-    if (idToken === INVALID_TOKEN_IDENTITY) {
+    // world.liffAuthHeaders() 以 encodeURIComponent 編碼 identity（header 不可含非 Latin-1 字元），此處還原
+    let identity = idToken;
+    try {
+      identity = decodeURIComponent(idToken);
+    } catch {
+      // 非合法編碼：原樣比對
+    }
+    if (identity === INVALID_TOKEN_IDENTITY) {
       // 延遲載入：src 尚未實作時不影響 dry-run / 其他測試載入（tsx/cjs 下 require 可載入 .ts）
       const { InvalidTokenError } =
         require('../../../src/ports/id-token-verifier') as typeof import('../../../src/ports/id-token-verifier');
       throw new InvalidTokenError();
     }
-    return { sub: idToken };
+    return { sub: identity };
   }
 }
 

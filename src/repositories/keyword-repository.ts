@@ -35,4 +35,10 @@ export class KeywordRepository {
       select: { id: true },
     });
   }
+
+  /** 刪除指向指定分類的全部關鍵字，回傳刪除筆數。 */
+  async deleteByCategoryId(categoryId: number): Promise<number> {
+    const result = await this.db.categoryKeyword.deleteMany({ where: { categoryId } });
+    return result.count;
+  }
 }

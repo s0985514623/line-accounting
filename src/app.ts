@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import type { AppConfig } from './config/env';
 import { createErrorHandler } from './http/middleware/error-handler';
 import { createRequestLogger } from './http/middleware/request-logger';
+import { API_PREFIX, createApiRouter } from './http/routes/api';
 import { createHealthRouter } from './http/routes/health';
 import { EventDispatcher } from './line/event-dispatcher';
 import { FollowHandler } from './line/handlers/follow-handler';
@@ -18,6 +19,7 @@ import { createLogger } from './logging/logger';
 import type { Clock } from './ports/clock';
 import type { IdTokenVerifier } from './ports/id-token-verifier';
 import type { LineReplyGateway } from './ports/line-reply-gateway';
+import { CategoryService } from './services/category-service';
 import { OnboardingService } from './services/onboarding-service';
 import { ReportService } from './services/report-service';
 import { TransactionService } from './services/transaction-service';
@@ -46,6 +48,15 @@ export function createApp(deps: AppDeps): Express {
       channelSecret: deps.config.channelSecret,
       dispatcher: createEventDispatcher(deps, logger),
       logger,
+    }),
+  );
+  app.use(
+    API_PREFIX,
+    createApiRouter({
+      verifier: deps.idTokenVerifier,
+      ownerUserId: deps.config.ownerUserId,
+      logger,
+      categories: new CategoryService(deps.prisma),
     }),
   );
 

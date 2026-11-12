@@ -22,6 +22,14 @@ export interface CategoryDetail extends CategorySummary {
 }
 
 const SUMMARY_SELECT = { id: true, name: true, isFallback: true } as const;
+const DETAIL_SELECT = { ...SUMMARY_SELECT, ledger: true, entryType: true } as const;
+
+/** 新增一般分類的輸入。 */
+export interface NewCategory {
+  ledger: Ledger;
+  entryType: EntryType;
+  name: string;
+}
 
 export class CategoryRepository {
   constructor(private readonly db: DbClient) {}
@@ -60,8 +68,65 @@ export class CategoryRepository {
   findById(id: number): Promise<CategoryDetail | null> {
     return this.db.category.findUnique({
       where: { id },
-      select: { ...SUMMARY_SELECT, ledger: true, entryType: true },
+      select: DETAIL_SELECT,
     });
+  }
+
+  /**
+   * 交易內以 `SELECT … FOR UPDATE` 鎖定分類列並回傳其資料；不存在回 null。
+   * 鎖住後，併發的「以此分類新增紀錄」（FK 需要 KEY SHARE 鎖）會等到本交易結束，
+   * 避免改歸「其他」之後又有新紀錄指向即將刪除的分類。
+   */
+  async lockById(id: number): Promise<CategoryDetail | null> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        id: number;
+        name: string;
+        is_fallback: boolean;
+        ledger: Ledger;
+        entry_type: EntryType;
+      }>
+    >`SELECT id, name, is_fallback, ledger::text AS ledger, entry_type::text AS entry_type
+      FROM categories WHERE id = ${id} FOR UPDATE`;
+    const row = rows[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      isFallback: row.is_fallback,
+      ledger: row.ledger,
+      entryType: row.entry_type,
+    };
+  }
+
+  /** 同帳本同收支的「其他」分類；不存在（資料損壞）回 null。 */
+  findFallback(ledger: Ledger, entryType: EntryType): Promise<CategorySummary | null> {
+    return this.db.category.findFirst({
+      where: { ledger, entryType, isFallback: true },
+      select: SUMMARY_SELECT,
+    });
+  }
+
+  /** LIFF 顯示用：同帳本同收支的分類，一般分類依 id 升冪，「其他」排最後。 */
+  listForDisplay(ledger: Ledger, entryType: EntryType): Promise<CategoryDetail[]> {
+    return this.db.category.findMany({
+      where: { ledger, entryType },
+      orderBy: [{ isFallback: 'asc' }, { id: 'asc' }],
+      select: DETAIL_SELECT,
+    });
+  }
+
+  /** 建立一般分類（isFallback = false）。同名時拋 Prisma P2002。 */
+  create(input: NewCategory): Promise<CategoryDetail> {
+    return this.db.category.create({
+      data: { ledger: input.ledger, entryType: input.entryType, name: input.name },
+      select: DETAIL_SELECT,
+    });
+  }
+
+  /** 刪除分類（關鍵字由 FK cascade 一併刪除；仍有紀錄指向時由 DB 拋出 FK 錯誤）。 */
+  async deleteById(id: number): Promise<void> {
+    await this.db.category.delete({ where: { id }, select: { id: true } });
   }
 
   /** 同帳本同收支的全部分類，依 id 升冪。 */

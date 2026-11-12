@@ -120,4 +120,13 @@ export class TransactionRepository {
       amount: group._sum.amount ?? 0,
     }));
   }
+
+  /** 將指向 fromCategoryId 的全部紀錄改指向 toCategoryId，回傳更新筆數。 */
+  async reassignCategory(fromCategoryId: number, toCategoryId: number): Promise<number> {
+    const result = await this.db.transaction.updateMany({
+      where: { categoryId: fromCategoryId },
+      data: { categoryId: toCategoryId },
+    });
+    return result.count;
+  }
 }
