@@ -1,0 +1,32 @@
+# 建構 context 排除清單（deployment-runbook §2）
+# 依賴與建構產物（映像內重新安裝 / 建構）
+node_modules
+**/node_modules
+dist
+web/dist
+coverage
+reports
+*.tsbuildinfo
+*.log
+
+# 機密：所有 .env*，僅保留範本
+.env
+.env.*
+!.env.example
+
+# 版控與工具設定
+.git
+.github
+.serena
+.claude
+.idea
+.vscode
+
+# 非執行期內容
+specs
+plans
+tests
+scripts
+docker-compose.dev.yml
+Dockerfile
+.dockerignore

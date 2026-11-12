@@ -1,0 +1,129 @@
+# LINE 記帳 — CI（deployment-runbook §6.1）
+# 觸發：PR，以及由 deploy.yml（P2b）以 workflow_call 重用。
+# 第三方 action 一律釘 commit SHA，註解標示對應版本。
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: backend（typecheck / lint / unit / BDD）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # 暫定 postgres:16（與 docker-compose.dev.yml 一致）；待 Q-2 共用環境盤點後對齊主版號（P2b）
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+          TZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://test:test@localhost:5432/test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run test:bdd -- --strict
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: cucumber-report
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  web:
+    name: web（LIFF 前端；web/ 不存在時略過）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # hashFiles 只能用於 step 層級的 if（job 層級尚無 workspace），故在 step 判斷；
+    # web/ 不存在時本 job 仍以 success 結束，image-smoke 不會因 needs 被連帶略過。
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: web/ 尚未建立（P8 前）— 略過
+        if: hashFiles('web/package.json') == ''
+        run: echo "::notice::web/package.json 不存在，略過 web job"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: hashFiles('web/package.json') != ''
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - if: hashFiles('web/package.json') != ''
+        run: npm --prefix web ci
+      - if: hashFiles('web/package.json') != ''
+        run: npm --prefix web run typecheck
+      - if: hashFiles('web/package.json') != ''
+        run: npm --prefix web test
+      - if: hashFiles('web/package.json') != ''
+        run: npm --prefix web run build
+
+  image-smoke:
+    name: image-smoke（build → migrate → seed → /healthz）
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    needs: [backend, web]
+    services:
+      postgres:
+        # 暫定 postgres:16；待 Q-2 對齊（同 backend job）
+        image: postgres:16
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test
+          TZ: UTC
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test -d test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      # scripts/smoke/image-smoke.mjs 的覆寫參數：
+      # - 映像容器經 --add-host host.docker.internal:host-gateway 連到 runner 上發佈的 5432
+      # - SMOKE_DB_CONTAINER 見下方 step（job context 只能在 step 層級使用）
+      SMOKE_DB_HOST: host.docker.internal
+      SMOKE_DB_PORT: '5432'
+      SMOKE_DB_USER: test
+      SMOKE_DB_PASSWORD: test
+      SMOKE_DB_ADMIN_DB: test
+      SMOKE_IMAGE: la:ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      # smoke 腳本只用 Node 內建模組，無須 npm ci
+      - name: npm run smoke:image
+        env:
+          # 以 service container 的 id 執行 `docker exec <id> psql`（建立 / 刪除臨時 database）
+          SMOKE_DB_CONTAINER: ${{ job.services.postgres.id }}
+        run: npm run smoke:image

@@ -17,10 +17,12 @@
     "test:bdd": "cucumber-js",
     "test:bdd:dry": "cucumber-js --dry-run",
     "test:web": "npm --prefix web test",
+    "smoke:image": "node scripts/smoke/image-smoke.mjs",
     "test": "npm run test:unit && npm run test:bdd && npm run test:web",
     "db:migrate:dev": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "seed:defaults": "tsx src/cli/seed-defaults.ts",
+    "seed:defaults:prod": "node dist/cli/seed-defaults.js",
     "richmenu:setup": "tsx src/cli/setup-rich-menu.ts"
   },
   "dependencies": {
