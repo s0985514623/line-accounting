@@ -1,0 +1,101 @@
+// LINE 記帳 — Prisma schema（來源：specs/entity/erm.dbml）
+// 資料表 / 欄位 / enum 型別名稱一律對應 erm.dbml 的 snake_case（@@map / @map）。
+// Prisma 無法表達的約束（partial unique index、CHECK）於 init migration SQL 手動追加：
+//   - categories_one_fallback：每個 ledger × entry_type 恰一個 is_fallback = true
+//   - transactions_amount_positive：amount > 0
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Ledger {
+  personal
+  company
+
+  @@map("ledger")
+}
+
+enum EntryType {
+  expense
+  income
+
+  @@map("entry_type")
+}
+
+enum EntrySource {
+  line_text
+  liff_form
+
+  @@map("entry_source")
+}
+
+/// 分類。個人/公司帳本各自一套，支出/收入分開；「其他」（isFallback）不可刪除。
+model Category {
+  id         Int       @id @default(autoincrement())
+  ledger     Ledger
+  entryType  EntryType @map("entry_type")
+  name       String    @db.VarChar(50)
+  isFallback Boolean   @default(false) @map("is_fallback")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  keywords     CategoryKeyword[]
+  transactions Transaction[]
+
+  @@unique([ledger, entryType, name])
+  @@map("categories")
+}
+
+/// 自動學習的分類關鍵字；ledger / entryType 冗餘自 category，用於唯一約束。
+model CategoryKeyword {
+  id         Int       @id @default(autoincrement())
+  categoryId Int       @map("category_id")
+  ledger     Ledger
+  entryType  EntryType @map("entry_type")
+  keyword    String    @db.VarChar(50)
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([ledger, entryType, keyword])
+  @@map("category_keywords")
+}
+
+/// 記帳紀錄（硬刪除）。category 必須與 ledger、entryType 一致（應用層驗證）。
+model Transaction {
+  id         Int         @id @default(autoincrement())
+  ledger     Ledger
+  entryType  EntryType   @map("entry_type")
+  item       String      @db.VarChar(50)
+  /// must be > 0；TWD 正整數（CHECK transactions_amount_positive）
+  amount     Int
+  categoryId Int         @map("category_id")
+  /// 記帳日期（Asia/Taipei），以 src/db/date-only.ts 轉換
+  occurredOn DateTime    @map("occurred_on") @db.Date
+  note       String?
+  source     EntrySource
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  category       Category        @relation(fields: [categoryId], references: [id])
+  postbackTokens PostbackToken[]
+
+  @@index([ledger, occurredOn])
+  @@index([categoryId])
+  @@map("transactions")
+}
+
+/// 已使用的分類按鈕 token（防重複記帳）。紀錄被刪除時 transactionId 變 null（token 仍視為已使用）。
+model PostbackToken {
+  token         String   @id @db.VarChar(64)
+  transactionId Int?     @map("transaction_id")
+  usedAt        DateTime @default(now()) @map("used_at")
+
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@map("postback_tokens")
+}

@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+web/node_modules/
+
+# build output
+dist/
+web/dist/
+*.tsbuildinfo
+
+# environment (secrets) - .env.example 必須納入版控
+.env
+.env.*
+!.env.example
+
+# test / coverage reports
+reports/
+coverage/
+.vitest-cache/
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# local tooling
+.serena/
+.claude/settings.local.json

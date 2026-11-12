@@ -1,0 +1,8 @@
+node_modules
+dist
+reports
+coverage
+package-lock.json
+specs
+plans
+web
