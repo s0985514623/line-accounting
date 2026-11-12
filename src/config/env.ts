@@ -43,21 +43,39 @@ export class EnvValidationError extends Error {
   }
 }
 
-/**
- * 驗證環境變數。只讀取傳入的 source（預設 process.env），不修改它。
- * @throws EnvValidationError 任何 key 缺少或格式不合法
- */
-export function loadEnv(source: Record<string, string | undefined> = process.env): Env {
-  const result = EnvSchema.safeParse(source);
+type EnvSource = Record<string, string | undefined>;
+
+/** 以 schema 驗證 source；失敗時只回報 key 名稱（zod 的 issue message 可能夾帶輸入值，故不採用）。 */
+function parseEnv<T extends z.ZodType>(schema: T, source: EnvSource): z.infer<T> {
+  const result = schema.safeParse(source);
   if (result.success) return result.data;
 
-  // 只取 issue 的 path（key 名稱）；zod 的 issue message 可能夾帶輸入值，故不採用
   const keys = new Set<string>();
   for (const issue of result.error.issues) {
     const key = issue.path[0];
     keys.add(typeof key === 'string' ? key : '(unknown)');
   }
   throw new EnvValidationError([...keys]);
+}
+
+/**
+ * 驗證環境變數。只讀取傳入的 source（預設 process.env），不修改它。
+ * @throws EnvValidationError 任何 key 缺少或格式不合法
+ */
+export function loadEnv(source: EnvSource = process.env): Env {
+  return parseEnv(EnvSchema, source);
+}
+
+const DatabaseEnvSchema = EnvSchema.pick({ DATABASE_URL: true, LOG_LEVEL: true });
+
+export type DatabaseEnv = z.infer<typeof DatabaseEnvSchema>;
+
+/**
+ * 只需要資料庫的 CLI（seed-defaults 等）使用：僅驗證 DATABASE_URL（與 LOG_LEVEL）。
+ * @throws EnvValidationError
+ */
+export function loadDatabaseEnv(source: EnvSource = process.env): DatabaseEnv {
+  return parseEnv(DatabaseEnvSchema, source);
 }
 
 /** createApp 所需的設定（與測試替身 buildTestDeps().config 同形）。 */

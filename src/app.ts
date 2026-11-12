@@ -9,10 +9,14 @@ import type { AppConfig } from './config/env';
 import { createErrorHandler } from './http/middleware/error-handler';
 import { createRequestLogger } from './http/middleware/request-logger';
 import { createHealthRouter } from './http/routes/health';
+import { EventDispatcher } from './line/event-dispatcher';
+import { FollowHandler } from './line/handlers/follow-handler';
+import { createWebhookRouter } from './line/webhook-route';
 import { createLogger } from './logging/logger';
 import type { Clock } from './ports/clock';
 import type { IdTokenVerifier } from './ports/id-token-verifier';
 import type { LineReplyGateway } from './ports/line-reply-gateway';
+import { OnboardingService } from './services/onboarding-service';
 
 export interface AppDeps {
   prisma: PrismaClient;
@@ -33,7 +37,25 @@ export function createApp(deps: AppDeps): Express {
   app.use(createRequestLogger(logger));
 
   app.use(createHealthRouter(deps.prisma, logger));
+  app.use(
+    createWebhookRouter({
+      channelSecret: deps.config.channelSecret,
+      dispatcher: createEventDispatcher(deps, logger),
+      logger,
+    }),
+  );
 
   app.use(createErrorHandler(logger));
   return app;
+}
+
+/** 組裝 webhook 事件分派（service → handler → dispatcher）。 */
+function createEventDispatcher(deps: AppDeps, logger: Logger): EventDispatcher {
+  const onboarding = new OnboardingService(deps.prisma);
+  return new EventDispatcher({
+    ownerUserId: deps.config.ownerUserId,
+    gateway: deps.lineGateway,
+    handlers: { follow: new FollowHandler(onboarding) },
+    logger,
+  });
 }

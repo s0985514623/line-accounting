@@ -2,24 +2,19 @@
  * 進入點：讀 env → 建立 deps → listen → graceful shutdown（SIGTERM / SIGINT）。
  */
 import type { Server } from 'node:http';
+import { messagingApi } from '@line/bot-sdk';
+import { LineMessagingGateway } from './adapters/line-messaging-gateway';
 import { SystemClock } from './adapters/system-clock';
 import { createApp } from './app';
 import { EnvValidationError, loadEnv, toAppConfig } from './config/env';
 import { disconnectPrismaClient, getPrismaClient } from './db/prisma';
 import { createLogger } from './logging/logger';
 import type { IdTokenVerifier } from './ports/id-token-verifier';
-import type { LineReplyGateway } from './ports/line-reply-gateway';
 
 /** 等待進行中請求的上限；逾時強制結束。 */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 
-// P0 尚無真實 adapter：LINE Reply（P1：line-messaging-gateway）、LIFF 驗證（P6：line-id-token-verifier）。
-// 在接上之前明確失敗，避免靜默吞掉呼叫。
-const pendingLineGateway: LineReplyGateway = {
-  reply: async () => {
-    throw new Error('LINE reply gateway 尚未實作（P1）');
-  },
-};
+// LIFF 驗證尚無真實 adapter（P6：line-id-token-verifier）。在接上之前明確失敗，避免靜默放行。
 const pendingIdTokenVerifier: IdTokenVerifier = {
   verify: async () => {
     throw new Error('ID token verifier 尚未實作（P6）');
@@ -44,7 +39,10 @@ function main(): void {
   const app = createApp({
     prisma,
     clock: new SystemClock(),
-    lineGateway: pendingLineGateway,
+    lineGateway: new LineMessagingGateway(
+      new messagingApi.MessagingApiClient({ channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN }),
+      logger,
+    ),
     idTokenVerifier: pendingIdTokenVerifier,
     config,
     logger,
