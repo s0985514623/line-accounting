@@ -34,8 +34,27 @@ export interface AppDeps {
   logger?: Logger;
 }
 
+/** 由 route / handler 共用的 service（每個 app 各一組）。 */
+interface AppServices {
+  onboarding: OnboardingService;
+  categories: CategoryService;
+  transactions: TransactionService;
+  reports: ReportService;
+}
+
+function createServices(deps: AppDeps): AppServices {
+  const onboarding = new OnboardingService(deps.prisma);
+  return {
+    onboarding,
+    categories: new CategoryService(deps.prisma),
+    transactions: new TransactionService({ prisma: deps.prisma, clock: deps.clock, onboarding }),
+    reports: new ReportService(deps.prisma),
+  };
+}
+
 export function createApp(deps: AppDeps): Express {
   const logger = deps.logger ?? createLogger({ level: deps.config.logLevel });
+  const services = createServices(deps);
   const app = express();
 
   app.disable('x-powered-by');
@@ -46,7 +65,7 @@ export function createApp(deps: AppDeps): Express {
   app.use(
     createWebhookRouter({
       channelSecret: deps.config.channelSecret,
-      dispatcher: createEventDispatcher(deps, logger),
+      dispatcher: createEventDispatcher(deps, services, logger),
       logger,
     }),
   );
@@ -56,7 +75,10 @@ export function createApp(deps: AppDeps): Express {
       verifier: deps.idTokenVerifier,
       ownerUserId: deps.config.ownerUserId,
       logger,
-      categories: new CategoryService(deps.prisma),
+      categories: services.categories,
+      transactions: services.transactions,
+      reports: services.reports,
+      clock: deps.clock,
     }),
   );
 
@@ -65,25 +87,23 @@ export function createApp(deps: AppDeps): Express {
 }
 
 /** 組裝 webhook 事件分派（service → handler → dispatcher）。 */
-function createEventDispatcher(deps: AppDeps, logger: Logger): EventDispatcher {
-  const onboarding = new OnboardingService(deps.prisma);
-  const transactions = new TransactionService({
-    prisma: deps.prisma,
-    clock: deps.clock,
-    onboarding,
-  });
+function createEventDispatcher(
+  deps: AppDeps,
+  services: AppServices,
+  logger: Logger,
+): EventDispatcher {
   return new EventDispatcher({
     ownerUserId: deps.config.ownerUserId,
     gateway: deps.lineGateway,
     handlers: {
-      follow: new FollowHandler(onboarding),
+      follow: new FollowHandler(services.onboarding),
       message: new TextMessageHandler({
-        transactions,
-        reports: new ReportService(deps.prisma),
+        transactions: services.transactions,
+        reports: services.reports,
         clock: deps.clock,
         liffId: deps.config.liffId,
       }),
-      postback: new PostbackHandler(transactions, logger),
+      postback: new PostbackHandler(services.transactions, logger),
     },
     logger,
   });

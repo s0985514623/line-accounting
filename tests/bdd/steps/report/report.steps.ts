@@ -19,10 +19,10 @@
  * 乾跑：npx cucumber-js specs/features/report/查詢月度文字摘要.feature --dry-run
  */
 import assert from 'node:assert/strict';
-import { DataTable, Then } from '@cucumber/cucumber';
-import { assertSameRows, requireSingleReply } from '../../support/assertions';
+import { DataTable, Then, When } from '@cucumber/cucumber';
+import { assertSameRows, requireResponse, requireSingleReply } from '../../support/assertions';
 import type { LineMessage } from '../../support/stubs';
-import { mapLedger, unquote, type Canon } from '../../support/table-mappers';
+import { mapLedger, rowToLiffQuery, unquote, type Canon } from '../../support/table-mappers';
 import type { TestWorld } from '../../support/world';
 
 interface ParsedCategoryLine {
@@ -232,4 +232,58 @@ Then('回覆應附圖表連結，參數為：', function (this: TestWorld, table
   const row = rows[0] as Record<string, string>;
   assert.equal(url.searchParams.get('month'), unquote(row['月份'] ?? ''), 'month 參數不符');
   assert.equal(url.searchParams.get('ledger'), mapLedger(row['帳本'] ?? ''), 'ledger 參數不符');
+});
+
+// ---- LIFF 月度統計（P7） -------------------------------------------------------------------------
+
+// W10（query）：GET /api/reports/monthly?month=&ledger=（空白儲存格不帶 query param；兩者皆空 → 無 query string）
+When('記帳者以 LIFF 查詢月度統計：', async function (this: TestWorld, table: DataTable) {
+  const rows = table.hashes();
+  assert.equal(rows.length, 1, `參數表必須恰好 1 列，實際 ${rows.length} 列`);
+  const http = await this.http();
+  this.lastResponse = await http
+    .get('/api/reports/monthly')
+    .set(this.liffAuthHeaders())
+    .query(rowToLiffQuery(rows[0] as Record<string, string>));
+});
+
+const REPORT_FIELD: Record<string, string> = {
+  帳本: 'ledger',
+  月份: 'month',
+  收入合計: 'incomeTotal',
+  支出合計: 'expenseTotal',
+  結餘: 'balance',
+};
+
+// T15（readmodel-then）：回應 JSON 的 ledger / month / incomeTotal / expenseTotal / balance
+Then('月度統計結果應為：', function (this: TestWorld, table: DataTable) {
+  const response = requireResponse(this);
+  assert.equal(response.status, 200, `預期 HTTP 200，實際 ${response.status}：${response.text}`);
+  const headers = table.raw()[0] ?? [];
+  const rows = table.hashes();
+  assert.equal(rows.length, 1, '月度統計結果表應只有一列');
+  const row = rows[0] as Record<string, string>;
+
+  const expected: Canon = {};
+  const actual: Canon = {};
+  for (const header of headers) {
+    const field = REPORT_FIELD[header];
+    assert.ok(field, `月度統計結果不支援的欄位：${header}`);
+    const raw = unquote(row[header] ?? '');
+    const value: unknown = response.body?.[field];
+    assert.ok(value !== undefined && value !== null, `回應缺少欄位 ${field}：${response.text}`);
+    if (header === '帳本') {
+      expected[header] = mapLedger(raw);
+      actual[header] = String(value);
+    } else if (header === '月份') {
+      expected[header] = raw;
+      actual[header] = String(value);
+    } else {
+      assert.equal(typeof value, 'number', `欄位 ${field} 應為 number：${response.text}`);
+      assert.ok(Number.isInteger(value), `欄位 ${field} 應為整數：${String(value)}`);
+      expected[header] = String(Number(raw));
+      actual[header] = String(value);
+    }
+  }
+  assertSameRows('月度統計結果', [actual], [expected]);
 });

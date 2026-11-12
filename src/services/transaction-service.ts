@@ -17,11 +17,21 @@
  * findSummaryById / deleteById（implementation-plan P4；確認刪除記帳紀錄.feature）：
  *  - id 不是 1..int4 上限的整數 → 視為不存在，不碰資料庫。
  *  - deleteById 只執行一次 DELETE（以被刪除列組成結果）；P2025 → notFound，其他例外原樣拋出。
+ *
+ * LIFF 表單 CRUD（implementation-plan P7-2、DF-3；以表單記帳 / 編輯 / 刪除 / 查詢記帳紀錄列表.feature）：
+ *  失敗一律拋 DomainError，由 http error-handler 轉成 api.yml 的 Error 形狀。
+ *  - createFromForm：分類存在（否則 NOT_FOUND）且帳本、收支一致（否則 CATEGORY_MISMATCH）→ 寫入（source = liff_form）。
+ *  - updateFromForm：紀錄存在 → 分類檢查 → 全欄位更新（source 不變）；任何檢查失敗皆不寫入。
+ *  - deleteFromForm：同 deleteById，不存在 → NOT_FOUND。
+ *  - listByMonth：指定帳本與月份，日期新到舊、同日 id 大到小。
+ *  - 檢查後才被併發刪除：分類（FK P2003）/ 紀錄（P2025）→ NOT_FOUND。
  */
 import { randomBytes } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
+import { monthRange, todayInTaipei } from '../domain/date-utils';
+import type { EntryType, Ledger } from '../domain/enums';
+import { DomainError } from '../domain/errors';
 import type { PickPayload } from '../domain/postback-codec';
-import { todayInTaipei } from '../domain/date-utils';
 import { isValidRecordId } from '../domain/record-id';
 import type { TextEntry } from '../domain/text-entry-parser';
 import type { Clock } from '../ports/clock';
@@ -30,7 +40,9 @@ import { KeywordRepository } from '../repositories/keyword-repository';
 import { PostbackTokenRepository } from '../repositories/postback-token-repository';
 import {
   TransactionRepository,
+  type TransactionDetail,
   type TransactionSummary,
+  type TransactionUpdate,
 } from '../repositories/transaction-repository';
 import { CategoryMatcher } from './category-matcher';
 import type { EnsureDefaultCategoriesResult } from './onboarding-service';
@@ -81,7 +93,14 @@ export type CompletePickResult =
   /** 分類存在但帳本或收支與 payload 不符 */
   | { kind: 'categoryMismatch' };
 
-export type { TransactionSummary };
+export type { TransactionDetail, TransactionSummary };
+
+/** LIFF 表單的記帳輸入（全欄位；已由 http schema 驗證格式）。 */
+export type FormTransactionInput = TransactionUpdate;
+
+const TRANSACTION_NOT_FOUND_MESSAGE = '記帳紀錄不存在';
+const CATEGORY_NOT_FOUND_MESSAGE = '分類不存在';
+const CATEGORY_MISMATCH_MESSAGE = '分類不屬於所選帳本與收支';
 
 export type DeleteByIdResult =
   | {
@@ -102,8 +121,17 @@ class PickTokenConflictError extends Error {
   }
 }
 
+function isPrismaError(error: unknown, code: string): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === code;
+}
+
 function isUniqueViolation(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+  return isPrismaError(error, 'P2002');
+}
+
+/** FK 違反：檢查通過後分類才被併發刪除。 */
+function isForeignKeyViolation(error: unknown): boolean {
+  return isPrismaError(error, 'P2003');
 }
 
 export interface TransactionServiceDeps {
@@ -233,6 +261,82 @@ export class TransactionService {
       amount: deleted.amount,
       occurredOn: deleted.occurredOn,
     };
+  }
+
+  /**
+   * LIFF 表單記帳（source = liff_form）。
+   * @throws DomainError NOT_FOUND（分類不存在）、CATEGORY_MISMATCH（分類帳本或收支不符）
+   */
+  async createFromForm(input: FormTransactionInput): Promise<TransactionDetail> {
+    await this.requireMatchingCategory(input.ledger, input.entryType, input.categoryId);
+    try {
+      return await this.transactions.createDetailed({ ...input, source: 'liff_form' });
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new DomainError('NOT_FOUND', CATEGORY_NOT_FOUND_MESSAGE);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * LIFF 編輯：全欄位更新，source 不變；任何檢查失敗皆不寫入。
+   * @throws DomainError NOT_FOUND（紀錄或分類不存在）、CATEGORY_MISMATCH
+   */
+  async updateFromForm(id: number, input: FormTransactionInput): Promise<TransactionDetail> {
+    if (!(await this.findSummaryById(id))) {
+      throw new DomainError('NOT_FOUND', TRANSACTION_NOT_FOUND_MESSAGE);
+    }
+    await this.requireMatchingCategory(input.ledger, input.entryType, input.categoryId);
+
+    let updated: TransactionDetail | null;
+    try {
+      updated = await this.transactions.update(id, input);
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new DomainError('NOT_FOUND', CATEGORY_NOT_FOUND_MESSAGE);
+      }
+      throw error;
+    }
+    if (!updated) throw new DomainError('NOT_FOUND', TRANSACTION_NOT_FOUND_MESSAGE);
+    return updated;
+  }
+
+  /**
+   * LIFF 刪除（硬刪除）。
+   * @throws DomainError NOT_FOUND（紀錄不存在，含重複刪除）
+   */
+  async deleteFromForm(id: number): Promise<void> {
+    const result = await this.deleteById(id);
+    if (result.kind === 'notFound') {
+      throw new DomainError('NOT_FOUND', TRANSACTION_NOT_FOUND_MESSAGE);
+    }
+  }
+
+  /**
+   * 指定帳本、月份（'YYYY-MM'）的紀錄，日期新到舊、同日 id 大到小。
+   * @throws RangeError month 格式不合法（呼叫端應先以 schema 驗證）
+   */
+  listByMonth(ledger: Ledger, month: string): Promise<TransactionDetail[]> {
+    return this.transactions.listByDateRange(ledger, monthRange(month));
+  }
+
+  /**
+   * 分類必須存在且屬於指定帳本與收支。
+   * @throws DomainError NOT_FOUND、CATEGORY_MISMATCH
+   */
+  private async requireMatchingCategory(
+    ledger: Ledger,
+    entryType: EntryType,
+    categoryId: number,
+  ): Promise<void> {
+    const category = isValidRecordId(categoryId)
+      ? await this.categories.findById(categoryId)
+      : null;
+    if (!category) throw new DomainError('NOT_FOUND', CATEGORY_NOT_FOUND_MESSAGE);
+    if (category.ledger !== ledger || category.entryType !== entryType) {
+      throw new DomainError('CATEGORY_MISMATCH', CATEGORY_MISMATCH_MESSAGE);
+    }
   }
 
   /** ASM-08：分類數為 0 時建立預設分類（ensureDefaultCategories 本身冪等、可併發）。 */

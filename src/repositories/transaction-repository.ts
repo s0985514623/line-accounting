@@ -45,6 +45,79 @@ function toSummary(row: SummaryRow): TransactionSummary {
   };
 }
 
+/** LIFF 顯示用的完整紀錄（含分類名稱）。 */
+export interface TransactionDetail {
+  id: number;
+  ledger: Ledger;
+  entryType: EntryType;
+  item: string;
+  amount: number;
+  categoryId: number;
+  categoryName: string;
+  /** YYYY-MM-DD */
+  occurredOn: string;
+  note: string | null;
+  source: EntrySource;
+}
+
+/** 全欄位更新的輸入（source 不可變更）。 */
+export type TransactionUpdate = Omit<NewTransaction, 'source'>;
+
+const DETAIL_SELECT = {
+  id: true,
+  ledger: true,
+  entryType: true,
+  item: true,
+  amount: true,
+  categoryId: true,
+  occurredOn: true,
+  note: true,
+  source: true,
+  category: { select: { name: true } },
+} as const;
+
+interface DetailRow {
+  id: number;
+  ledger: Ledger;
+  entryType: EntryType;
+  item: string;
+  amount: number;
+  categoryId: number;
+  occurredOn: Date;
+  note: string | null;
+  source: EntrySource;
+  category: { name: string };
+}
+
+function toDetail(row: DetailRow): TransactionDetail {
+  return {
+    id: row.id,
+    ledger: row.ledger,
+    entryType: row.entryType,
+    item: row.item,
+    amount: row.amount,
+    categoryId: row.categoryId,
+    categoryName: row.category.name,
+    occurredOn: formatDateOnly(row.occurredOn),
+    note: row.note,
+    source: row.source,
+  };
+}
+
+/** 新增紀錄的 Prisma data（日期在此轉為 Date）。 */
+function toCreateData(input: NewTransaction): Prisma.TransactionUncheckedCreateInput {
+  return {
+    ledger: input.ledger,
+    entryType: input.entryType,
+    item: input.item,
+    amount: input.amount,
+    categoryId: input.categoryId,
+    occurredOn: parseDateOnly(input.occurredOn),
+    note: input.note,
+    source: input.source,
+  };
+}
+
 /** 依 (收支, 分類) 彙總的金額。 */
 export interface CategoryAmountTotal {
   entryType: EntryType;
@@ -69,18 +142,57 @@ export class TransactionRepository {
   /** 新增一筆記帳紀錄，回傳其 id。 */
   async create(input: NewTransaction): Promise<{ id: number }> {
     return this.db.transaction.create({
-      data: {
-        ledger: input.ledger,
-        entryType: input.entryType,
-        item: input.item,
-        amount: input.amount,
-        categoryId: input.categoryId,
-        occurredOn: parseDateOnly(input.occurredOn),
-        note: input.note,
-        source: input.source,
-      },
+      data: toCreateData(input),
       select: { id: true },
     });
+  }
+
+  /** 新增一筆記帳紀錄，回傳完整紀錄（含分類名稱）。 */
+  async createDetailed(input: NewTransaction): Promise<TransactionDetail> {
+    const row = await this.db.transaction.create({
+      data: toCreateData(input),
+      select: DETAIL_SELECT,
+    });
+    return toDetail(row);
+  }
+
+  /**
+   * 全欄位更新（source 不變），回傳更新後的完整紀錄。
+   * 紀錄不存在（P2025，含併發刪除）回 null；其他例外原樣拋出。
+   */
+  async update(id: number, input: TransactionUpdate): Promise<TransactionDetail | null> {
+    try {
+      const row = await this.db.transaction.update({
+        where: { id },
+        data: {
+          ledger: input.ledger,
+          entryType: input.entryType,
+          item: input.item,
+          amount: input.amount,
+          categoryId: input.categoryId,
+          occurredOn: parseDateOnly(input.occurredOn),
+          note: input.note,
+        },
+        select: DETAIL_SELECT,
+      });
+      return toDetail(row);
+    } catch (error) {
+      if (isRecordNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  /** 指定帳本、日期區間 [start, endExclusive) 內的紀錄，依日期新到舊、同日 id 大到小。 */
+  async listByDateRange(ledger: Ledger, range: DateOnlyRange): Promise<TransactionDetail[]> {
+    const rows = await this.db.transaction.findMany({
+      where: {
+        ledger,
+        occurredOn: { gte: parseDateOnly(range.start), lt: parseDateOnly(range.endExclusive) },
+      },
+      orderBy: [{ occurredOn: 'desc' }, { id: 'desc' }],
+      select: DETAIL_SELECT,
+    });
+    return rows.map(toDetail);
   }
 
   /** 依 id 取紀錄摘要；不存在回 null。 */

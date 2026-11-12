@@ -5,10 +5,15 @@
 import express, { Router } from 'express';
 import type { Logger } from 'pino';
 import { DomainError } from '../../domain/errors';
+import type { Clock } from '../../ports/clock';
 import type { IdTokenVerifier } from '../../ports/id-token-verifier';
 import type { CategoryService } from '../../services/category-service';
+import type { ReportService } from '../../services/report-service';
+import type { TransactionService } from '../../services/transaction-service';
 import { createLiffAuth } from '../middleware/liff-auth';
 import { createCategoriesRouter } from './categories';
+import { createReportsRouter } from './reports';
+import { createTransactionsRouter } from './transactions';
 
 export const API_PREFIX = '/api';
 const JSON_BODY_LIMIT = '16kb';
@@ -18,6 +23,10 @@ export interface ApiRouterDeps {
   ownerUserId: string;
   logger: Logger;
   categories: CategoryService;
+  transactions: TransactionService;
+  reports: ReportService;
+  /** 月度統計省略 month 時決定「本月」 */
+  clock: Clock;
 }
 
 export function createApiRouter(deps: ApiRouterDeps): Router {
@@ -33,6 +42,8 @@ export function createApiRouter(deps: ApiRouterDeps): Router {
   router.use(express.json({ limit: JSON_BODY_LIMIT }));
 
   router.use(createCategoriesRouter(deps.categories));
+  router.use(createTransactionsRouter(deps.transactions));
+  router.use(createReportsRouter({ reports: deps.reports, clock: deps.clock }));
 
   router.use((_req, _res, next) => {
     next(new DomainError('NOT_FOUND', '找不到此 API'));

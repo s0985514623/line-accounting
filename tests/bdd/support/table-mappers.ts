@@ -75,6 +75,15 @@ function liffField(header: string): string {
   return field;
 }
 
+/**
+ * LIFF 請求用的列舉轉換：已知中文 → 內部值；未知值（例如規格故意送的「家庭」）原樣送出，
+ * 讓伺服器端驗證回 INVALID_ARGUMENT，而不是在測試端先丟例外。
+ */
+function liffEnum(table: Record<string, string>, raw: string): string {
+  const text = unquote(raw);
+  return table[text] ?? text;
+}
+
 /** 將一列 Data Table 轉成 LIFF 請求 JSON body（空白省略；備註空白 → null）。 */
 export function rowToLiffBody(row: Record<string, string>): Record<string, unknown> {
   const body: Record<string, unknown> = {};
@@ -85,9 +94,9 @@ export function rowToLiffBody(row: Record<string, string>): Record<string, unkno
     } else if (raw === '') {
       continue;
     } else if (field === 'ledger') {
-      body.ledger = mapLedger(raw);
+      body.ledger = liffEnum(LEDGER, raw);
     } else if (field === 'entryType') {
-      body.entryType = mapEntryType(raw);
+      body.entryType = liffEnum(ENTRY_TYPE, raw);
     } else if (field === 'amount') {
       body.amount = amountCell(raw);
     } else if (field === 'categoryId') {
@@ -105,8 +114,8 @@ export function rowToLiffQuery(row: Record<string, string>): Record<string, stri
   for (const [header, raw] of Object.entries(row)) {
     const field = liffField(header);
     if (raw === '') continue;
-    if (field === 'ledger') query.ledger = mapLedger(raw);
-    else if (field === 'entryType') query.entryType = mapEntryType(raw);
+    if (field === 'ledger') query.ledger = liffEnum(LEDGER, raw);
+    else if (field === 'entryType') query.entryType = liffEnum(ENTRY_TYPE, raw);
     else query[field] = unquote(raw);
   }
   return query;
