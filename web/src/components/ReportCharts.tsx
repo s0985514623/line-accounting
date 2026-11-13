@@ -80,19 +80,6 @@ export function ReportCharts({ report, onSelectCategory }: TReportChartsProps) {
   const barData = [
     { name: report.month, income: report.incomeTotal, expense: report.expenseTotal },
   ];
-  const pies = [
-    {
-      caption: '支出分類佔比',
-      entryType: 'expense' as const,
-      slices: toPieSlices(report.expenseByCategory),
-    },
-    {
-      caption: '收入分類佔比',
-      entryType: 'income' as const,
-      slices: toPieSlices(report.incomeByCategory),
-    },
-  ].filter((pie) => pie.slices.length > 0);
-
   return (
     <div className={styles.charts} aria-hidden="true">
       <figure className={styles.card}>
@@ -127,6 +114,36 @@ export function ReportCharts({ report, onSelectCategory }: TReportChartsProps) {
         </ResponsiveContainer>
       </figure>
 
+      <CategoryPies report={report} onSelectCategory={onSelectCategory} />
+    </div>
+  );
+}
+
+type TCategoryPiesProps = {
+  report: Pick<TMonthlyReport, 'expenseByCategory' | 'incomeByCategory'>;
+  onSelectCategory?: (entryType: TEntryType, share: TCategoryShare) => void;
+};
+
+/**
+ * 支出 / 收入分類圓餅圖（該收支無紀錄時不畫該圓餅）。月報與年報共用；
+ * 外層容器需自行 aria-hidden（數值另有文字表格）。
+ */
+export function CategoryPies({ report, onSelectCategory }: TCategoryPiesProps) {
+  const pies = [
+    {
+      caption: '支出分類佔比',
+      entryType: 'expense' as const,
+      slices: toPieSlices(report.expenseByCategory),
+    },
+    {
+      caption: '收入分類佔比',
+      entryType: 'income' as const,
+      slices: toPieSlices(report.incomeByCategory),
+    },
+  ].filter((pie) => pie.slices.length > 0);
+
+  return (
+    <>
       {pies.map(({ caption, entryType, slices }) => (
         <figure key={caption} className={styles.card}>
           <figcaption className={styles.caption}>{caption}</figcaption>
@@ -153,6 +170,6 @@ export function ReportCharts({ report, onSelectCategory }: TReportChartsProps) {
           </ResponsiveContainer>
         </figure>
       ))}
-    </div>
+    </>
   );
 }

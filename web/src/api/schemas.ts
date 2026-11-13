@@ -161,3 +161,28 @@ export type TRecurringOccurrence = z.infer<typeof recurringOccurrenceSchema>;
 export const recurringOccurrenceListSchema = z.object({
   items: z.array(recurringOccurrenceSchema),
 });
+
+/** 年度報表的單月合計。 */
+export const monthTotalsSchema = z.object({
+  /** YYYY-MM */
+  month: z.string(),
+  incomeTotal: z.number().int(),
+  expenseTotal: z.number().int(),
+  balance: z.number().int(),
+});
+
+export type TMonthTotals = z.infer<typeof monthTotalsSchema>;
+
+/** 年度報表：全年合計、分類佔比與 1–12 月收支。 */
+export const annualReportSchema = z.object({
+  ledger: ledgerSchema,
+  year: z.number().int(),
+  incomeTotal: z.number().int(),
+  expenseTotal: z.number().int(),
+  balance: z.number().int(),
+  expenseByCategory: z.array(expenseByCategorySchema),
+  incomeByCategory: z.array(expenseByCategorySchema),
+  months: z.array(monthTotalsSchema),
+});
+
+export type TAnnualReport = z.infer<typeof annualReportSchema>;

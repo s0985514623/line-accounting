@@ -6,7 +6,8 @@
  * 本 service 只負責 I/O 與組裝，計算規則全部在 src/domain/monthly-report.ts。
  */
 import type { PrismaClient } from '@prisma/client';
-import { monthRange } from '../domain/date-utils';
+import { buildAnnualReport, type AnnualReport } from '../domain/annual-report';
+import { monthRange, yearRange } from '../domain/date-utils';
 import type { Ledger } from '../domain/enums';
 import {
   buildMonthlyReport,
@@ -39,5 +40,20 @@ export class ReportService {
       categoryName: names.get(total.categoryId) ?? `#${total.categoryId}`,
     }));
     return buildMonthlyReport({ ledger, month, rows });
+  }
+
+  /** 指定帳本、年度（Asia/Taipei 日期）的年度報表：合計、分類佔比、12 個月收支。 */
+  async getAnnualReport(ledger: Ledger, year: number): Promise<AnnualReport> {
+    const range = yearRange(year);
+    const [totals, monthRows] = await Promise.all([
+      this.transactions.sumByCategory(ledger, range),
+      this.transactions.sumByMonth(ledger, range),
+    ]);
+    const names = await this.categories.findNamesByIds(totals.map((total) => total.categoryId));
+    const categoryRows: CategoryTotalRow[] = totals.map((total) => ({
+      ...total,
+      categoryName: names.get(total.categoryId) ?? `#${total.categoryId}`,
+    }));
+    return buildAnnualReport({ ledger, year, categoryRows, monthRows });
   }
 }
