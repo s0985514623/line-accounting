@@ -123,15 +123,17 @@ export function TransactionListPage() {
     <main className={styles.page}>
       <header className={styles.header}>
         <h1 className={styles.title}>記帳紀錄</h1>
-        <Link to="/new" className={styles.addLink}>
-          新增記帳
-        </Link>
+        <div className={styles.headerActions}>
+          <Link to="/batch" className={styles.batchLink}>
+            批次記帳
+          </Link>
+          <Link to="/new" className={styles.addLink}>
+            新增記帳
+          </Link>
+        </div>
       </header>
 
       <nav aria-label="功能選單" className={styles.nav}>
-        <Link to="/batch" className={styles.navLink}>
-          批次記帳
-        </Link>
         <Link to="/recurring" className={styles.navLink}>
           固定收支
         </Link>
