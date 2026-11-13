@@ -93,6 +93,14 @@ export function monthRange(month: string): MonthRange {
   };
 }
 
+/** 年度的半開區間：start = 當年 1/1、endExclusive = 隔年 1/1。 */
+export function yearRange(year: number): MonthRange {
+  return {
+    start: `${String(year).padStart(4, '0')}-01-01`,
+    endExclusive: `${String(year + 1).padStart(4, '0')}-01-01`,
+  };
+}
+
 /** 月度摘要的期間指令。 */
 export type SummaryPeriod = 'this_month' | 'last_month';
 

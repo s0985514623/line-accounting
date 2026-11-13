@@ -300,6 +300,33 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /api/reports/annual:
+    get:
+      tags: [reports]
+      operationId: getAnnualReport
+      summary: 查詢年度報表（全年合計、分類佔比、1–12 月收支）
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: year
+          in: query
+          required: false
+          description: 西元年（2000–2100）；省略時為今年（Asia/Taipei）
+          schema: { type: string, pattern: '^\d{4}$', example: '2026' }
+        - name: ledger
+          in: query
+          required: false
+          description: 省略時為 personal
+          schema: { $ref: '#/components/schemas/Ledger' }
+      responses:
+        '200':
+          description: 年度報表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnnualReport' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /api/recurring:
     get:
       tags: [recurring]
@@ -630,6 +657,35 @@ components:
           type: array
           description: 依金額由大到小；無收入時為空陣列（佔比分母為 incomeTotal）
           items: { $ref: '#/components/schemas/CategoryShare' }
+
+    AnnualReport:
+      type: object
+      required: [ledger, year, incomeTotal, expenseTotal, balance, expenseByCategory, incomeByCategory, months]
+      properties:
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        year: { type: integer, example: 2026 }
+        incomeTotal: { type: integer }
+        expenseTotal: { type: integer }
+        balance: { type: integer, description: incomeTotal - expenseTotal（可為負） }
+        expenseByCategory:
+          type: array
+          items: { $ref: '#/components/schemas/CategoryShare' }
+        incomeByCategory:
+          type: array
+          items: { $ref: '#/components/schemas/CategoryShare' }
+        months:
+          type: array
+          minItems: 12
+          maxItems: 12
+          description: 1–12 月依序；沒有紀錄的月份金額為 0
+          items:
+            type: object
+            required: [month, incomeTotal, expenseTotal, balance]
+            properties:
+              month: { type: string, example: '2026-01' }
+              incomeTotal: { type: integer }
+              expenseTotal: { type: integer }
+              balance: { type: integer }
 
     CategoryShare:
       type: object

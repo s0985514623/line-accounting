@@ -11,3 +11,14 @@ export const MonthlyReportQuerySchema = z.object({
 });
 
 export type MonthlyReportQuery = z.infer<typeof MonthlyReportQuerySchema>;
+
+/** GET /api/reports/annual 的 query：year（'YYYY'，2000–2100）、ledger 皆可省略。 */
+export const AnnualReportQuerySchema = z.object({
+  year: z
+    .string()
+    .regex(/^\d{4}$/)
+    .transform(Number)
+    .refine((year) => year >= 2000 && year <= 2100)
+    .optional(),
+  ledger: LedgerSchema.optional(),
+});

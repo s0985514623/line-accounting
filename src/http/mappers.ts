@@ -2,6 +2,7 @@
  * Repository 資料 → API DTO（specs/api/api.yml components/schemas）。
  */
 import type { EntrySource, EntryType, Ledger } from '../domain/enums';
+import type { AnnualReport } from '../domain/annual-report';
 import type { CategoryShare, MonthlyReport } from '../domain/monthly-report';
 import type { CategoryDetail } from '../repositories/category-repository';
 import type {
@@ -156,5 +157,42 @@ export function toRecurringOccurrenceDto(
     categoryName: occurrence.categoryName,
     note: occurrence.note,
     dueOn: occurrence.dueOn,
+  };
+}
+
+export interface MonthTotalsDto {
+  /** YYYY-MM */
+  month: string;
+  incomeTotal: number;
+  expenseTotal: number;
+  balance: number;
+}
+
+export interface AnnualReportDto {
+  ledger: Ledger;
+  year: number;
+  incomeTotal: number;
+  expenseTotal: number;
+  balance: number;
+  expenseByCategory: ExpenseCategoryShareDto[];
+  incomeByCategory: ExpenseCategoryShareDto[];
+  months: MonthTotalsDto[];
+}
+
+export function toAnnualReportDto(report: AnnualReport): AnnualReportDto {
+  return {
+    ledger: report.ledger,
+    year: report.year,
+    incomeTotal: report.incomeTotal,
+    expenseTotal: report.expenseTotal,
+    balance: report.balance,
+    expenseByCategory: report.expenseByCategory.map(toShareDto),
+    incomeByCategory: report.incomeByCategory.map(toShareDto),
+    months: report.months.map((month) => ({
+      month: month.month,
+      incomeTotal: month.incomeTotal,
+      expenseTotal: month.expenseTotal,
+      balance: month.balance,
+    })),
   };
 }

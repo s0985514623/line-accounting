@@ -160,3 +160,11 @@
   border-top: 0;
   background: var(--color-surface-overlay);
 }
+
+.switchLink {
+  align-self: flex-start;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-brand);
+  text-decoration: none;
+}

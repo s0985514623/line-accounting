@@ -3,7 +3,13 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { request } from './http';
-import { monthlyReportSchema, type TLedger, type TMonthlyReport } from './schemas';
+import {
+  annualReportSchema,
+  monthlyReportSchema,
+  type TAnnualReport,
+  type TLedger,
+  type TMonthlyReport,
+} from './schemas';
 
 /** 月度統計查詢共用的 query key 前綴。 */
 export const MONTHLY_REPORT_QUERY_KEY = ['reports', 'monthly'] as const;
@@ -32,5 +38,28 @@ export function useMonthlyReport(month: string | undefined, ledger: TLedger | un
   return useQuery({
     queryKey: [...MONTHLY_REPORT_QUERY_KEY, month, ledger],
     queryFn: () => fetchMonthlyReport({ month, ledger }),
+  });
+}
+
+/** 年度統計查詢共用的 query key 前綴。 */
+export const ANNUAL_REPORT_QUERY_KEY = ['reports', 'annual'] as const;
+
+/** 取得年度統計（GET /api/reports/annual）。 */
+export function fetchAnnualReport(year: number, ledger: TLedger): Promise<TAnnualReport> {
+  return request('/api/reports/annual', {
+    query: { year: String(year), ledger },
+    schema: annualReportSchema,
+  });
+}
+
+/**
+ * 取得年度統計的 Hook。
+ * @param year 西元年
+ * @param ledger 帳本
+ */
+export function useAnnualReport(year: number, ledger: TLedger) {
+  return useQuery({
+    queryKey: [...ANNUAL_REPORT_QUERY_KEY, year, ledger],
+    queryFn: () => fetchAnnualReport(year, ledger),
   });
 }

@@ -1,5 +1,5 @@
 import { Fragment, useId, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useMonthlyReport } from '../api/reports';
 import {
   ledgerSchema,
@@ -229,6 +229,12 @@ export function ChartPage() {
       <header className={styles.header}>
         <BackLink />
         <h1 className={styles.title}>統計圖表</h1>
+        <Link
+          to={{ pathname: '/annual', search: `?year=${month.slice(0, 4)}&ledger=${ledger}` }}
+          className={styles.switchLink}
+        >
+          看 {month.slice(0, 4)} 年度報表 →
+        </Link>
       </header>
 
       <section className={styles.filters}>

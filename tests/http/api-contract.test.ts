@@ -386,6 +386,98 @@ describe('[Error] 錯誤 body 形狀與狀態碼符合 api.yml', () => {
     );
   });
 
+  it('GET /api/reports/annual → 200 AnnualReport（全年合計、12 個月、跨年不計入）', async () => {
+    await insertWithIds(harness.prisma, 'transactions', [
+      {
+        id: 20,
+        ledger: 'personal',
+        entry_type: 'expense',
+        item: '機票',
+        amount: 8000,
+        category_id: 1,
+        occurred_on: '2026-03-31',
+        note: null,
+        source: 'liff_form',
+      },
+      {
+        id: 21,
+        ledger: 'personal',
+        entry_type: 'expense',
+        item: '去年',
+        amount: 999,
+        category_id: 1,
+        occurred_on: '2025-12-31',
+        note: null,
+        source: 'liff_form',
+      },
+      {
+        id: 22,
+        ledger: 'personal',
+        entry_type: 'expense',
+        item: '明年',
+        amount: 777,
+        category_id: 1,
+        occurred_on: '2027-01-01',
+        note: null,
+        source: 'liff_form',
+      },
+    ]);
+    const response = await request(app)
+      .get('/api/reports/annual')
+      .query({ year: '2026', ledger: 'personal' })
+      .set(AUTH);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ledger: 'personal',
+      year: 2026,
+      incomeTotal: 50000,
+      expenseTotal: 8220,
+      balance: 41780,
+    });
+    expect(response.body.expenseByCategory[0]).toMatchObject({
+      categoryId: 1,
+      categoryName: '餐飲',
+      amount: 8120,
+      ratio: 98.8,
+    });
+    expect(response.body.months).toHaveLength(12);
+    expect(response.body.months[0]).toEqual({
+      month: '2026-01',
+      incomeTotal: 0,
+      expenseTotal: 0,
+      balance: 0,
+    });
+    expect(response.body.months[2]).toEqual({
+      month: '2026-03',
+      incomeTotal: 0,
+      expenseTotal: 8000,
+      balance: -8000,
+    });
+    expect(response.body.months[10]).toEqual({
+      month: '2026-11',
+      incomeTotal: 50000,
+      expenseTotal: 220,
+      balance: 49780,
+    });
+  });
+
+  it('GET /api/reports/annual 省略參數 → 今年（Asia/Taipei）個人帳本', async () => {
+    const response = await request(app).get('/api/reports/annual').set(AUTH);
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ ledger: 'personal', year: 2026 });
+  });
+
+  it('GET 年度統計參數不合法 → 400 INVALID_ARGUMENT', async () => {
+    for (const year of ['26', '2026-11', '1999']) {
+      expectErrorShape(
+        await request(app).get('/api/reports/annual').query({ year }).set(AUTH),
+        400,
+        'INVALID_ARGUMENT',
+      );
+    }
+  });
+
   it('GET 月度統計參數不合法 → 400 INVALID_ARGUMENT', async () => {
     expectErrorShape(
       await request(app).get('/api/reports/monthly').query({ month: '202611' }).set(AUTH),
@@ -407,6 +499,7 @@ describe('[Security] 未通過 liff-auth 時一律不動資料', () => {
     ['DELETE /api/transactions/10', 'delete:/api/transactions/10', (r) => r],
     ['GET /api/transactions', 'get:/api/transactions?month=2026-11&ledger=personal', (r) => r],
     ['GET /api/reports/monthly', 'get:/api/reports/monthly', (r) => r],
+    ['GET /api/reports/annual', 'get:/api/reports/annual', (r) => r],
   ];
 
   it.each(routes)('%s 無 Authorization → 401 UNAUTHENTICATED', async (_name, spec, shape) => {

@@ -16,6 +16,9 @@ import './styles/global.css';
 const ChartPage = lazy(() =>
   import('./pages/ChartPage').then((module) => ({ default: module.ChartPage })),
 );
+const AnnualReportPage = lazy(() =>
+  import('./pages/AnnualReportPage').then((module) => ({ default: module.AnnualReportPage })),
+);
 
 /** 只對暫時性錯誤（網路、5xx）自動重試一次；4xx 與 401（HTTP 層已處理）不重試。 */
 function shouldRetryQuery(failureCount: number, error: Error): boolean {
@@ -57,6 +60,14 @@ export function App() {
             element={
               <Suspense fallback={<LoadingStatus />}>
                 <ChartPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/annual"
+            element={
+              <Suspense fallback={<LoadingStatus />}>
+                <AnnualReportPage />
               </Suspense>
             }
           />

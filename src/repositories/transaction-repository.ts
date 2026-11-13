@@ -126,6 +126,14 @@ export interface CategoryAmountTotal {
 }
 
 /** 'YYYY-MM-DD' 半開區間 [start, endExclusive)。 */
+/** 依 (月份, 收支) 彙總的金額。 */
+export interface MonthAmountTotal {
+  /** 'YYYY-MM' */
+  month: string;
+  entryType: EntryType;
+  amount: number;
+}
+
 export interface DateOnlyRange {
   start: string;
   endExclusive: string;
@@ -230,6 +238,27 @@ export class TransactionRepository {
       entryType: group.entryType,
       categoryId: group.categoryId,
       amount: group._sum.amount ?? 0,
+    }));
+  }
+
+  /** 指定帳本、日期區間 [start, endExclusive) 內，依 (月份 'YYYY-MM', 收支) 彙總金額。 */
+  async sumByMonth(ledger: Ledger, range: DateOnlyRange): Promise<MonthAmountTotal[]> {
+    const rows = await this.db.$queryRaw<
+      { month: string; entry_type: EntryType; amount: bigint | number }[]
+    >`
+      SELECT to_char(occurred_on, 'YYYY-MM') AS month,
+             entry_type::text AS entry_type,
+             SUM(amount) AS amount
+      FROM transactions
+      WHERE ledger = ${ledger}::ledger
+        AND occurred_on >= ${range.start}::date
+        AND occurred_on < ${range.endExclusive}::date
+      GROUP BY 1, 2
+      ORDER BY 1, 2`;
+    return rows.map((row) => ({
+      month: row.month,
+      entryType: row.entry_type,
+      amount: Number(row.amount),
     }));
   }
 
