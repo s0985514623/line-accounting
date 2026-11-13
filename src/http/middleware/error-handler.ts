@@ -16,6 +16,7 @@ export const HTTP_STATUS_BY_VIOLATION: Readonly<Record<ViolationType, number>> =
   NOT_FOUND: 404,
   DUPLICATE_NAME: 409,
   FALLBACK_CATEGORY_UNDELETABLE: 422,
+  OCCURRENCE_RESOLVED: 409,
 };
 
 export const INTERNAL_ERROR_MESSAGE = '系統錯誤';

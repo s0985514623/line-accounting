@@ -37,6 +37,8 @@ export type ParseResult =
   | { kind: 'summary'; ledger: Ledger; period: SummaryPeriod }
   /** 「待分類」：重新顯示最早一筆待分類的批次項目 */
   | { kind: 'resumePending' }
+  /** 「固定」：列出每月固定收支 */
+  | { kind: 'listRecurring' }
   | { kind: 'formatError' }
   | { kind: 'dateError' }
   | { kind: 'amountError' }
@@ -63,6 +65,7 @@ const NUMERIC_PATTERN = /^[+-]?\d+(\.\d+)?$/;
 const FORMAT_ERROR = { kind: 'formatError' } as const;
 
 const RESUME_PENDING_COMMAND = '待分類';
+const LIST_RECURRING_COMMAND = '固定';
 
 const RELATIVE_DATE_WORDS: ReadonlyMap<string, number> = new Map([
   ['今天', 0],
@@ -131,6 +134,7 @@ export function parseTextEntry(input: string): ParseResult {
   const summary = SUMMARY_COMMANDS.get(joined);
   if (summary) return { kind: 'summary', ...summary };
   if (joined === RESUME_PENDING_COMMAND) return { kind: 'resumePending' };
+  if (joined === LIST_RECURRING_COMMAND) return { kind: 'listRecurring' };
 
   let ledger: Ledger = 'personal';
   let date: EntryDateSpec | null = null;

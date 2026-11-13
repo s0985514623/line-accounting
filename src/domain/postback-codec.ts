@@ -44,10 +44,15 @@ export interface BatchPickPayload {
   categoryId: number;
 }
 
+/** 固定收支某一期的按鈕：`action=rconfirm&id=<occurrenceId>`（確認入帳）、`action=rskip&id=<occurrenceId>`（略過）。 */
+export const OCCURRENCE_ACTIONS = ['rconfirm', 'rskip'] as const;
+export type OccurrenceAction = (typeof OCCURRENCE_ACTIONS)[number];
+
 export type PostbackPayload =
   | ({ action: 'pick' } & PickPayload)
   | ({ action: 'bpick' } & BatchPickPayload)
-  | { action: RecordAction; id: number };
+  | { action: RecordAction; id: number }
+  | { action: OccurrenceAction; id: number };
 
 export function isPostbackDataWithinLimit(data: string): boolean {
   return data.length <= POSTBACK_DATA_MAX_LENGTH;
@@ -94,7 +99,7 @@ export function encodePick(payload: PickPayload): string {
   ]);
 }
 
-function encodeRecordAction(action: RecordAction, id: number): string {
+function encodeRecordAction(action: RecordAction | OccurrenceAction, id: number): string {
   return encodePairs([
     ['action', action],
     ['id', String(id)],
@@ -108,6 +113,16 @@ export function encodeBatchPick(payload: BatchPickPayload): string {
     ['id', String(payload.pendingId)],
     ['categoryId', String(payload.categoryId)],
   ]);
+}
+
+/** 編碼固定收支「確認入帳」按鈕 data。 */
+export function encodeOccurrenceConfirm(occurrenceId: number): string {
+  return encodeRecordAction('rconfirm', occurrenceId);
+}
+
+/** 編碼固定收支「略過」按鈕 data。 */
+export function encodeOccurrenceSkip(occurrenceId: number): string {
+  return encodeRecordAction('rskip', occurrenceId);
 }
 
 /** 編碼「刪除」按鈕 data。 */
@@ -179,7 +194,7 @@ const BatchPickSchema = z
     categoryId: raw.categoryId,
   }));
 
-function recordActionSchema(action: RecordAction): z.ZodType<PostbackPayload> {
+function recordActionSchema(action: RecordAction | OccurrenceAction): z.ZodType<PostbackPayload> {
   return z
     .strictObject({
       action: z.literal(action),
@@ -195,6 +210,7 @@ const SCHEMAS_BY_ACTION: ReadonlyMap<string, z.ZodType<PostbackPayload>> = new M
   ['pick', PickSchema],
   ['bpick', BatchPickSchema],
   ...RECORD_ACTIONS.map((action) => [action, recordActionSchema(action)] as const),
+  ...OCCURRENCE_ACTIONS.map((action) => [action, recordActionSchema(action)] as const),
 ]);
 
 /** 切成 key → value（已反跳脫）；格式錯誤或 key 重複回 null。以 Map 承接，避免 `__proto__` 之類的 key 汙染物件。 */

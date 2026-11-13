@@ -12,6 +12,7 @@ export const VIOLATION_TYPES = [
   'CATEGORY_MISMATCH',
   'DUPLICATE_NAME',
   'FALLBACK_CATEGORY_UNDELETABLE',
+  'OCCURRENCE_RESOLVED',
 ] as const;
 
 export type ViolationType = (typeof VIOLATION_TYPES)[number];

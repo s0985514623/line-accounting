@@ -8,10 +8,12 @@ import { DomainError } from '../../domain/errors';
 import type { Clock } from '../../ports/clock';
 import type { IdTokenVerifier } from '../../ports/id-token-verifier';
 import type { CategoryService } from '../../services/category-service';
+import type { RecurringService } from '../../services/recurring-service';
 import type { ReportService } from '../../services/report-service';
 import type { TransactionService } from '../../services/transaction-service';
 import { createLiffAuth } from '../middleware/liff-auth';
 import { createCategoriesRouter } from './categories';
+import { createRecurringRouter } from './recurring';
 import { createReportsRouter } from './reports';
 import { createTransactionsRouter } from './transactions';
 
@@ -25,6 +27,7 @@ export interface ApiRouterDeps {
   categories: CategoryService;
   transactions: TransactionService;
   reports: ReportService;
+  recurring: RecurringService;
   /** 月度統計省略 month 時決定「本月」 */
   clock: Clock;
 }
@@ -44,6 +47,7 @@ export function createApiRouter(deps: ApiRouterDeps): Router {
   router.use(createCategoriesRouter(deps.categories));
   router.use(createTransactionsRouter(deps.transactions));
   router.use(createReportsRouter({ reports: deps.reports, clock: deps.clock }));
+  router.use(createRecurringRouter(deps.recurring));
 
   router.use((_req, _res, next) => {
     next(new DomainError('NOT_FOUND', '找不到此 API'));

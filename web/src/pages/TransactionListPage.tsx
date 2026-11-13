@@ -132,6 +132,9 @@ export function TransactionListPage() {
         <Link to="/batch" className={styles.navLink}>
           批次記帳
         </Link>
+        <Link to="/recurring" className={styles.navLink}>
+          固定收支
+        </Link>
         <Link to="/categories" className={styles.navLink}>
           分類管理
         </Link>

@@ -5,6 +5,9 @@ import { ApiError } from './api/http';
 import { LoadingStatus } from './components/LoadingStatus';
 import { BatchFormPage } from './pages/BatchFormPage';
 import { CategoryPage } from './pages/CategoryPage';
+import { OccurrenceConfirmPage } from './pages/OccurrenceConfirmPage';
+import { RecurringFormPage } from './pages/RecurringFormPage';
+import { RecurringPage } from './pages/RecurringPage';
 import { TransactionFormPage } from './pages/TransactionFormPage';
 import { TransactionListPage } from './pages/TransactionListPage';
 import './styles/global.css';
@@ -45,6 +48,10 @@ export function App() {
           <Route path="/edit/:id" element={<TransactionFormPage />} />
           <Route path="/batch" element={<BatchFormPage />} />
           <Route path="/categories" element={<CategoryPage />} />
+          <Route path="/recurring" element={<RecurringPage />} />
+          <Route path="/recurring/new" element={<RecurringFormPage />} />
+          <Route path="/recurring/edit/:id" element={<RecurringFormPage />} />
+          <Route path="/recurring/occurrences/:id" element={<OccurrenceConfirmPage />} />
           <Route
             path="/chart"
             element={

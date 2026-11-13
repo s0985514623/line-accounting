@@ -300,6 +300,164 @@ paths:
         '401': { $ref: '#/components/responses/Unauthenticated' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
+  /api/recurring:
+    get:
+      tags: [recurring]
+      operationId: listRecurringEntries
+      summary: 查詢每月固定收支規則（啟用中在前 → 帳本 → 每月幾號 → id）
+      security: [{ liffIdToken: [] }]
+      responses:
+        '200':
+          description: 規則列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RecurringEntry' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [recurring]
+      operationId: createRecurringEntry
+      summary: 新增每月固定收支（nextDueOn = 從今天起第一個到期日）
+      security: [{ liffIdToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurringEntryInput' }
+      responses:
+        '201':
+          description: 新增成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecurringEntry' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/recurring/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    put:
+      tags: [recurring]
+      operationId: updateRecurringEntry
+      summary: 編輯每月固定收支（改每月幾號或重新啟用時重算 nextDueOn，已產生過的月份不重複）
+      security: [{ liffIdToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecurringEntryInput' }
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RecurringEntry' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [recurring]
+      operationId: deleteRecurringEntry
+      summary: 刪除每月固定收支（各期一併刪除；已入帳的記帳紀錄保留）
+      security: [{ liffIdToken: [] }]
+      responses:
+        '204':
+          description: 刪除成功
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/recurring/occurrences:
+    get:
+      tags: [recurring]
+      operationId: listPendingOccurrences
+      summary: 查詢待確認的各期（到期日舊到新）
+      security: [{ liffIdToken: [] }]
+      responses:
+        '200':
+          description: 待確認列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RecurringOccurrence' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/recurring/occurrences/{id}/confirm:
+    post:
+      tags: [recurring]
+      operationId: confirmOccurrence
+      summary: 確認入帳（日期為到期日；amount 省略 = 本期金額；source = liff_form）
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer, minimum: 1, maximum: 99999999 }
+      responses:
+        '201':
+          description: 已入帳
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Transaction' }
+        '400': { $ref: '#/components/responses/InvalidArgument' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: OCCURRENCE_RESOLVED（已入帳或已略過）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/recurring/occurrences/{id}/skip:
+    post:
+      tags: [recurring]
+      operationId: skipOccurrence
+      summary: 略過這一期（不寫入記帳紀錄）
+      security: [{ liffIdToken: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '204':
+          description: 已略過
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: OCCURRENCE_RESOLVED（已入帳或已略過）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
 components:
   securitySchemes:
     liffIdToken:
@@ -345,6 +503,7 @@ components:
             - CATEGORY_MISMATCH
             - DUPLICATE_NAME
             - FALLBACK_CATEGORY_UNDELETABLE
+            - OCCURRENCE_RESOLVED
 
     Ledger:
       type: string
@@ -386,6 +545,55 @@ components:
         occurredOn: { type: string, format: date, example: '2026-11-12' }
         note: { type: string, nullable: true }
         source: { $ref: '#/components/schemas/EntrySource' }
+
+    RecurringEntryInput:
+      type: object
+      required: [ledger, entryType, item, amount, categoryId, dayOfMonth]
+      properties:
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        item: { type: string, minLength: 1, maxLength: 50, example: 房租 }
+        amount: { type: integer, minimum: 1, maximum: 99999999, example: 15000 }
+        categoryId: { type: integer, example: 3 }
+        dayOfMonth:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: 每月幾號；當月沒有該日時改用當月最後一天
+          example: 5
+        note: { type: string, nullable: true }
+        active: { type: boolean, default: true }
+
+    RecurringEntry:
+      type: object
+      required: [id, ledger, entryType, item, amount, categoryId, categoryName, dayOfMonth, note, active, nextDueOn]
+      properties:
+        id: { type: integer, example: 1 }
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        item: { type: string, example: 房租 }
+        amount: { type: integer, example: 15000 }
+        categoryId: { type: integer, example: 3 }
+        categoryName: { type: string, example: 居住 }
+        dayOfMonth: { type: integer, example: 5 }
+        note: { type: string, nullable: true }
+        active: { type: boolean }
+        nextDueOn: { type: string, format: date, example: '2026-12-05' }
+
+    RecurringOccurrence:
+      type: object
+      required: [id, recurringEntryId, ledger, entryType, item, amount, categoryId, categoryName, note, dueOn]
+      properties:
+        id: { type: integer, example: 7 }
+        recurringEntryId: { type: integer, example: 1 }
+        ledger: { $ref: '#/components/schemas/Ledger' }
+        entryType: { $ref: '#/components/schemas/EntryType' }
+        item: { type: string, example: 房租 }
+        amount: { type: integer, description: 本期金額（產生時的快照）, example: 15000 }
+        categoryId: { type: integer, example: 3 }
+        categoryName: { type: string, example: 居住 }
+        note: { type: string, nullable: true }
+        dueOn: { type: string, format: date, example: '2026-12-05' }
 
     CategoryInput:
       type: object
