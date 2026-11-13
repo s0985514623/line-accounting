@@ -16,7 +16,8 @@ export type ViolationType =
   | 'NOT_FOUND'
   | 'CATEGORY_MISMATCH'
   | 'DUPLICATE_NAME'
-  | 'FALLBACK_CATEGORY_UNDELETABLE';
+  | 'FALLBACK_CATEGORY_UNDELETABLE'
+  | 'OCCURRENCE_RESOLVED';
 
 export interface CategoryRow {
   id: number;
