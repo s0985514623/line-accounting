@@ -669,10 +669,10 @@ components:
         balance: { type: integer, description: incomeTotal - expenseTotal（可為負） }
         expenseByCategory:
           type: array
-          items: { $ref: '#/components/schemas/CategoryShare' }
+          items: { $ref: '#/components/schemas/AnnualCategoryShare' }
         incomeByCategory:
           type: array
-          items: { $ref: '#/components/schemas/CategoryShare' }
+          items: { $ref: '#/components/schemas/AnnualCategoryShare' }
         months:
           type: array
           minItems: 12
@@ -686,6 +686,19 @@ components:
               incomeTotal: { type: integer }
               expenseTotal: { type: integer }
               balance: { type: integer }
+
+    AnnualCategoryShare:
+      allOf:
+        - $ref: '#/components/schemas/CategoryShare'
+        - type: object
+          required: [monthlyAmounts]
+          properties:
+            monthlyAmounts:
+              type: array
+              minItems: 12
+              maxItems: 12
+              items: { type: integer }
+              description: 該分類 1–12 月的金額（index 0 = 1 月；無紀錄為 0）
 
     CategoryShare:
       type: object

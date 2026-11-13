@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { Fragment, useId, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Bar,
@@ -13,8 +13,9 @@ import {
 import { useAnnualReport } from '../api/reports';
 import {
   ledgerSchema,
+  type TAnnualCategoryShare,
   type TAnnualReport,
-  type TCategoryShare,
+  type TEntryType,
   type TLedger,
 } from '../api/schemas';
 import { BackLink } from '../components/BackLink';
@@ -27,6 +28,7 @@ import { taipeiCurrentMonth } from '../lib/date';
 import { formatAmount } from '../lib/format';
 import monthPickerStyles from '../components/MonthPicker.module.css';
 import chartStyles from '../components/ReportCharts.module.css';
+import annualStyles from './AnnualReportPage.module.css';
 import styles from './ChartPage.module.css';
 
 const DEFAULT_LEDGER: TLedger = 'personal';
@@ -191,15 +193,70 @@ function MonthTable({ report, ledger }: { report: TAnnualReport; ledger: TLedger
   );
 }
 
+/** 分類鍵：優先 categoryId，沒有時用名稱。 */
+const shareKey = (share: TAnnualCategoryShare): string =>
+  share.categoryId !== undefined ? `id:${share.categoryId}` : `name:${share.categoryName}`;
+
+/** 該分類 1–12 月金額；有金額的月份可點進該月統計並展開此分類細項。 */
+function CategoryMonths({
+  share,
+  entryType,
+  year,
+  ledger,
+}: {
+  share: TAnnualCategoryShare;
+  entryType: TEntryType;
+  year: number;
+  ledger: TLedger;
+}) {
+  return (
+    <ul className={annualStyles.monthList} aria-label={`${share.categoryName}每月金額`}>
+      {share.monthlyAmounts.map((amount, index) => {
+        const month = `${year}-${String(index + 1).padStart(2, '0')}`;
+        const label = `${index + 1} 月`;
+        const params = new URLSearchParams({ month, ledger, type: entryType });
+        if (share.categoryId !== undefined) params.set('category', String(share.categoryId));
+        return (
+          <li key={month}>
+            {amount > 0 ? (
+              <Link
+                to={{ pathname: '/chart', search: `?${params}` }}
+                className={annualStyles.monthLink}
+              >
+                <span>{label}</span>
+                <span className={annualStyles.monthAmount}>{formatAmount(amount)}</span>
+              </Link>
+            ) : (
+              <span className={`${annualStyles.monthLink} ${annualStyles.monthEmpty}`}>
+                <span>{label}</span>
+                <span className={annualStyles.monthAmount}>—</span>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** 分類明細表：分類名稱為按鈕，點擊展開 / 收合該分類 1–12 月金額（同時只展開一個）。 */
 function CategoryTable({
   caption,
   emptyText,
+  entryType,
   shares,
+  year,
+  ledger,
 }: {
   caption: string;
   emptyText: string;
-  shares: readonly TCategoryShare[];
+  entryType: TEntryType;
+  shares: readonly TAnnualCategoryShare[];
+  year: number;
+  ledger: TLedger;
 }) {
+  const idPrefix = useId();
+  const [openKey, setOpenKey] = useState<string | null>(null);
   if (shares.length === 0) return <p className={styles.empty}>{emptyText}</p>;
   return (
     <table className={styles.table}>
@@ -216,13 +273,45 @@ function CategoryTable({
         </tr>
       </thead>
       <tbody>
-        {shares.map((share) => (
-          <tr key={share.categoryId ?? share.categoryName}>
-            <td>{share.categoryName}</td>
-            <td className={styles.numeric}>{formatAmount(share.amount)}</td>
-            <td className={styles.numeric}>{`${share.ratio.toFixed(1)}%`}</td>
-          </tr>
-        ))}
+        {shares.map((share, index) => {
+          const key = shareKey(share);
+          const isOpen = openKey === key;
+          const detailId = `${idPrefix}-${index}`;
+          return (
+            <Fragment key={key}>
+              <tr className={isOpen ? styles.openRow : undefined}>
+                <td className={styles.categoryCell}>
+                  <button
+                    type="button"
+                    className={styles.categoryButton}
+                    aria-expanded={isOpen}
+                    aria-controls={isOpen ? detailId : undefined}
+                    onClick={() => setOpenKey(isOpen ? null : key)}
+                  >
+                    <span aria-hidden="true" className={styles.chevron}>
+                      {isOpen ? '▾' : '▸'}
+                    </span>
+                    {share.categoryName}
+                  </button>
+                </td>
+                <td className={styles.numeric}>{formatAmount(share.amount)}</td>
+                <td className={styles.numeric}>{`${share.ratio.toFixed(1)}%`}</td>
+              </tr>
+              {isOpen ? (
+                <tr id={detailId} className={styles.detailRow}>
+                  <td colSpan={3}>
+                    <CategoryMonths
+                      share={share}
+                      entryType={entryType}
+                      year={year}
+                      ledger={ledger}
+                    />
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -262,12 +351,18 @@ export function AnnualReportPage() {
           <CategoryTable
             caption="支出分類明細"
             emptyText="今年無支出"
+            entryType="expense"
             shares={report.expenseByCategory}
+            year={year}
+            ledger={ledger}
           />
           <CategoryTable
             caption="收入分類明細"
             emptyText="今年無收入"
+            entryType="income"
             shares={report.incomeByCategory}
+            year={year}
+            ledger={ledger}
           />
         </div>
       </>
@@ -282,7 +377,10 @@ export function AnnualReportPage() {
       </header>
 
       <section className={styles.filters}>
-        <YearPicker value={year} onChange={(nextYear) => updateParams({ year: nextYear, ledger })} />
+        <YearPicker
+          value={year}
+          onChange={(nextYear) => updateParams({ year: nextYear, ledger })}
+        />
         <LedgerToggle
           value={ledger}
           onChange={(nextLedger) => updateParams({ year, ledger: nextLedger })}

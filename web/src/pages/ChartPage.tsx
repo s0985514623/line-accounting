@@ -2,6 +2,7 @@ import { Fragment, useId, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useMonthlyReport } from '../api/reports';
 import {
+  entryTypeSchema,
   ledgerSchema,
   type TCategoryShare,
   type TEntryType,
@@ -32,6 +33,14 @@ function resolveReportParams(searchParams: URLSearchParams): { month: string; le
     month: isValidMonth(rawMonth) ? rawMonth : taipeiCurrentMonth(),
     ledger: parsedLedger.success ? parsedLedger.data : DEFAULT_LEDGER,
   };
+}
+
+/** 由年度報表帶入的初始展開分類（?type=expense|income&category=<id>）。 */
+function resolveInitialCategory(searchParams: URLSearchParams): TSelectedCategory | null {
+  const entryType = entryTypeSchema.safeParse(searchParams.get('type'));
+  const categoryId = searchParams.get('category') ?? '';
+  if (!entryType.success || !/^\d+$/.test(categoryId)) return null;
+  return { entryType: entryType.data, key: `id:${Number(categoryId)}`, fromChart: true };
 }
 
 type TReportSummaryProps = {
@@ -169,7 +178,9 @@ export function ChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { month, ledger } = resolveReportParams(searchParams);
   const reportQuery = useMonthlyReport(month, ledger);
-  const [selected, setSelected] = useState<TSelectedCategory | null>(null);
+  const [selected, setSelected] = useState<TSelectedCategory | null>(() =>
+    resolveInitialCategory(searchParams),
+  );
 
   const updateParams = (next: { month: string; ledger: TLedger }) => {
     setSelected(null);
