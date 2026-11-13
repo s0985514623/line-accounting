@@ -2,7 +2,7 @@
  * Repository 資料 → API DTO（specs/api/api.yml components/schemas）。
  */
 import type { EntrySource, EntryType, Ledger } from '../domain/enums';
-import type { MonthlyReport } from '../domain/monthly-report';
+import type { CategoryShare, MonthlyReport } from '../domain/monthly-report';
 import type { CategoryDetail } from '../repositories/category-repository';
 import type { TransactionDetail } from '../repositories/transaction-repository';
 
@@ -68,6 +68,11 @@ export interface MonthlyReportDto {
   expenseTotal: number;
   balance: number;
   expenseByCategory: ExpenseCategoryShareDto[];
+  incomeByCategory: ExpenseCategoryShareDto[];
+}
+
+function toShareDto(share: CategoryShare): ExpenseCategoryShareDto {
+  return { categoryName: share.categoryName, amount: share.amount, ratio: share.ratio };
 }
 
 export function toMonthlyReportDto(report: MonthlyReport): MonthlyReportDto {
@@ -77,10 +82,7 @@ export function toMonthlyReportDto(report: MonthlyReport): MonthlyReportDto {
     incomeTotal: report.incomeTotal,
     expenseTotal: report.expenseTotal,
     balance: report.balance,
-    expenseByCategory: report.expenseByCategory.map((share) => ({
-      categoryName: share.categoryName,
-      amount: share.amount,
-      ratio: share.ratio,
-    })),
+    expenseByCategory: report.expenseByCategory.map(toShareDto),
+    incomeByCategory: report.incomeByCategory.map(toShareDto),
   };
 }

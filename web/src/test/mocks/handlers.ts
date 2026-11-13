@@ -417,17 +417,21 @@ export const handlers = [
       inMonth.filter((t) => t.entryType === type).reduce((acc, t) => acc + t.amount, 0);
     const incomeTotal = sum('income');
     const expenseTotal = sum('expense');
-    const byCategory = new Map<string, number>();
-    for (const t of inMonth.filter((x) => x.entryType === 'expense')) {
-      byCategory.set(t.categoryName, (byCategory.get(t.categoryName) ?? 0) + t.amount);
-    }
-    const expenseByCategory = [...byCategory.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([categoryName, amount]) => ({
-        categoryName,
-        amount,
-        ratio: Math.round((amount / expenseTotal) * 1000) / 10,
-      }));
+    const sharesOf = (type: EntryType, total: number) => {
+      const byCategory = new Map<string, number>();
+      for (const t of inMonth.filter((x) => x.entryType === type)) {
+        byCategory.set(t.categoryName, (byCategory.get(t.categoryName) ?? 0) + t.amount);
+      }
+      return [...byCategory.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([categoryName, amount]) => ({
+          categoryName,
+          amount,
+          ratio: Math.round((amount / total) * 1000) / 10,
+        }));
+    };
+    const expenseByCategory = sharesOf('expense', expenseTotal);
+    const incomeByCategory = sharesOf('income', incomeTotal);
     return HttpResponse.json({
       ledger,
       month,
@@ -435,6 +439,7 @@ export const handlers = [
       expenseTotal,
       balance: incomeTotal - expenseTotal,
       expenseByCategory,
+      incomeByCategory,
     });
   }),
 ];

@@ -57,6 +57,7 @@ describe('[Smoke] buildMonthlyReport：規格範例（個人 2026-11）', () => 
         { categoryId: 1, categoryName: '餐飲', amount: 300, ratio: 75 },
         { categoryId: 2, categoryName: '其他', amount: 100, ratio: 25 },
       ],
+      incomeByCategory: [{ categoryId: 3, categoryName: '薪資', amount: 50000, ratio: 100 }],
     });
   });
 });
@@ -86,6 +87,26 @@ describe('[Happy] 佔比四捨五入至小數一位', () => {
     ]);
     expect(report.incomeTotal).toBe(51234);
     expect(report.expenseByCategory.map((c) => c.categoryName)).toEqual(['餐飲']);
+  });
+});
+
+describe('[Happy] incomeByCategory', () => {
+  it('收入分類佔比以 incomeTotal 為分母，金額降冪、同額 id 升冪', () => {
+    const report = build([
+      income(4, '獎金', 10000),
+      income(3, '薪資', 50000),
+      income(5, '利息', 10000),
+      expense(1, '餐飲', 100),
+    ]);
+    expect(report.incomeByCategory.map((c) => [c.categoryName, c.amount, c.ratio])).toEqual([
+      ['薪資', 50000, 71.4],
+      ['獎金', 10000, 14.3],
+      ['利息', 10000, 14.3],
+    ]);
+  });
+
+  it('沒有收入 → []', () => {
+    expect(build([expense(1, '餐飲', 100)]).incomeByCategory).toEqual([]);
   });
 });
 

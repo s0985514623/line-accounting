@@ -74,7 +74,7 @@ export const categoryListSchema = z.object({
   items: z.array(categorySchema),
 });
 
-/** 月度統計的單一支出分類（ratio 為百分比，四捨五入至小數一位）。 */
+/** 月度統計的單一分類（ratio 為百分比，分母為同收支合計，四捨五入至小數一位）。 */
 export const expenseByCategorySchema = z.object({
   categoryName: z.string(),
   amount: z.number().int(),
@@ -88,9 +88,12 @@ export const monthlyReportSchema = z.object({
   expenseTotal: z.number().int(),
   balance: z.number().int(),
   expenseByCategory: z.array(expenseByCategorySchema),
+  // 新增欄位：缺少時視為無收入分類（相容舊版伺服器回應）
+  incomeByCategory: z.array(expenseByCategorySchema).default([]),
 });
 
 export type TExpenseByCategory = z.infer<typeof expenseByCategorySchema>;
+export type TCategoryShare = TExpenseByCategory;
 export type TMonthlyReport = z.infer<typeof monthlyReportSchema>;
 
 /** POST /api/categories 的 body。 */

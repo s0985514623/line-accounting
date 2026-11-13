@@ -59,8 +59,8 @@ function summaryItems() {
   return within(region).getAllByRole('listitem');
 }
 
-function detailRows() {
-  const table = screen.getByRole('table', { name: '支出分類明細' });
+function detailRows(name = '支出分類明細') {
+  const table = screen.getByRole('table', { name });
   return within(table)
     .getAllByRole('row')
     .slice(1)
@@ -225,6 +225,49 @@ describe('ChartPage', () => {
       const items = summaryItems();
       expect(items[1]).toHaveTextContent(/支出\s*300/);
       expect(items[2]).toHaveTextContent(/結餘\s*-300/);
+    });
+  });
+
+  describe('Happy：收入分類明細表', () => {
+    it('依 API 順序顯示收入分類金額與佔比', async () => {
+      server.use(
+        http.get('*/api/reports/monthly', () =>
+          HttpResponse.json(
+            reportBody({
+              incomeTotal: 60000,
+              balance: 59600,
+              incomeByCategory: [
+                { categoryName: '薪資', amount: 50000, ratio: 83.3 },
+                { categoryName: '獎金', amount: 10000, ratio: 16.7 },
+              ],
+            }),
+          ),
+        ),
+      );
+      renderChart('?month=2026-11&ledger=personal');
+      await screen.findByRole('table', { name: '收入分類明細' });
+
+      expect(detailRows('收入分類明細')).toEqual([
+        ['薪資', '50,000', '83.3%'],
+        ['獎金', '10,000', '16.7%'],
+      ]);
+    });
+
+    it('MSW 以記憶體紀錄計算：個人 2026-11 薪資 100.0%', async () => {
+      renderChart('?month=2026-11&ledger=personal');
+      await screen.findByRole('table', { name: '收入分類明細' });
+      expect(detailRows('收入分類明細')).toEqual([['薪資', '50,000', '100.0%']]);
+    });
+
+    it('沒有收入 → 顯示「本月無收入」', async () => {
+      server.use(
+        http.get('*/api/reports/monthly', () =>
+          HttpResponse.json(reportBody({ incomeTotal: 0, balance: -400, incomeByCategory: [] })),
+        ),
+      );
+      renderChart('?month=2026-11&ledger=personal');
+      expect(await screen.findByText('本月無收入')).toBeInTheDocument();
+      expect(screen.queryByRole('table', { name: '收入分類明細' })).not.toBeInTheDocument();
     });
   });
 

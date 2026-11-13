@@ -9,22 +9,24 @@
  *   支出分類：                 <- 無支出時此區塊整個省略
  *   ・餐飲 300 元（75.0%）
  *   ・其他 100 元（25.0%）
+ *   收入分類：                 <- 無收入時此區塊整個省略
+ *   ・薪資 50000 元（100.0%）
  * 第二則訊息為 buttons template，單一 URI action「查看圖表」→ LIFF 圖表頁（同帳本、同月份）。
  * 依據：implementation-plan P5-4；specs/features/report/查詢月度文字摘要.feature。
  */
 import { LEDGER_LABELS, type Ledger } from '../../domain/enums';
-import type { ExpenseCategoryShare, MonthlyReport } from '../../domain/monthly-report';
+import type { CategoryShare, MonthlyReport } from '../../domain/monthly-report';
 import type { TemplateMessage, TextMessage } from '../../ports/line-reply-gateway';
 import { textMessage, truncateText } from './builders';
 import { MAX_ALT_TEXT_LENGTH, MAX_BUTTONS_TEXT_LENGTH } from './entry-replies';
 
 const CHART_LABEL = '查看圖表';
 
-function categoryLine(share: ExpenseCategoryShare): string {
+function categoryLine(share: CategoryShare): string {
   return `・${share.categoryName} ${share.amount} 元（${share.ratio.toFixed(1)}%）`;
 }
 
-/** 月度摘要文字（依 report.expenseByCategory 既有順序輸出，不重新排序）。 */
+/** 月度摘要文字（依 report 各分類清單既有順序輸出，不重新排序）。 */
 export function buildSummaryReply(report: MonthlyReport): TextMessage {
   const lines = [
     `【${LEDGER_LABELS[report.ledger]}】${report.month} 月度摘要`,
@@ -34,6 +36,9 @@ export function buildSummaryReply(report: MonthlyReport): TextMessage {
   ];
   if (report.expenseByCategory.length > 0) {
     lines.push('支出分類：', ...report.expenseByCategory.map(categoryLine));
+  }
+  if (report.incomeByCategory.length > 0) {
+    lines.push('收入分類：', ...report.incomeByCategory.map(categoryLine));
   }
   return textMessage(lines.join('\n'));
 }
