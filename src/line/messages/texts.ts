@@ -68,3 +68,8 @@ export const NO_PENDING_TEXT = '目前沒有待分類的項目';
 
 /** 批次待分類項目全部完成。 */
 export const BATCH_ALL_DONE_TEXT = '批次項目已全部分類完成';
+
+/** 批次中沿用的日期（上方第 line 行）有誤。 */
+export function batchInheritedDateErrorText(line: number): string {
+  return `沿用第 ${line} 行的日期有誤`;
+}
