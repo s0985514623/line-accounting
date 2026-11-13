@@ -407,7 +407,7 @@ components:
 
     MonthlyReport:
       type: object
-      required: [ledger, month, incomeTotal, expenseTotal, balance, expenseByCategory]
+      required: [ledger, month, incomeTotal, expenseTotal, balance, expenseByCategory, incomeByCategory]
       properties:
         ledger: { $ref: '#/components/schemas/Ledger' }
         month: { type: string, example: '2026-11' }
@@ -417,13 +417,19 @@ components:
         expenseByCategory:
           type: array
           description: 依金額由大到小；無支出時為空陣列
-          items:
-            type: object
-            required: [categoryName, amount, ratio]
-            properties:
-              categoryName: { type: string, example: 餐飲 }
-              amount: { type: integer, example: 300 }
-              ratio: { type: number, example: 75.0, description: 百分比，四捨五入至小數一位 }
+          items: { $ref: '#/components/schemas/CategoryShare' }
+        incomeByCategory:
+          type: array
+          description: 依金額由大到小；無收入時為空陣列（佔比分母為 incomeTotal）
+          items: { $ref: '#/components/schemas/CategoryShare' }
+
+    CategoryShare:
+      type: object
+      required: [categoryName, amount, ratio]
+      properties:
+        categoryName: { type: string, example: 餐飲 }
+        amount: { type: integer, example: 300 }
+        ratio: { type: number, example: 75.0, description: 百分比，四捨五入至小數一位 }
 
     LineWebhookBody:
       type: object

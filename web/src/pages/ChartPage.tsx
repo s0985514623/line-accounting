@@ -1,6 +1,11 @@
 import { useSearchParams } from 'react-router';
 import { useMonthlyReport } from '../api/reports';
-import { ledgerSchema, type TLedger, type TMonthlyReport } from '../api/schemas';
+import {
+  ledgerSchema,
+  type TCategoryShare,
+  type TLedger,
+  type TMonthlyReport,
+} from '../api/schemas';
 import { BackLink } from '../components/BackLink';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LedgerToggle } from '../components/LedgerToggle';
@@ -53,16 +58,22 @@ function ReportSummary({ report }: TReportSummaryProps) {
   );
 }
 
+type TCategoryTableProps = {
+  caption: string;
+  emptyText: string;
+  shares: readonly TCategoryShare[];
+};
+
 /**
- * 支出分類明細表（順序依 API：金額由大到小）；無支出時顯示「本月無支出」。
+ * 分類明細表（順序依 API：金額由大到小）；該收支無紀錄時顯示 emptyText。
  */
-function ExpenseTable({ report }: TReportSummaryProps) {
-  if (report.expenseByCategory.length === 0) {
-    return <p className={styles.empty}>本月無支出</p>;
+function CategoryTable({ caption, emptyText, shares }: TCategoryTableProps) {
+  if (shares.length === 0) {
+    return <p className={styles.empty}>{emptyText}</p>;
   }
   return (
     <table className={styles.table}>
-      <caption className={styles.tableCaption}>支出分類明細</caption>
+      <caption className={styles.tableCaption}>{caption}</caption>
       <thead>
         <tr>
           <th scope="col">分類</th>
@@ -75,7 +86,7 @@ function ExpenseTable({ report }: TReportSummaryProps) {
         </tr>
       </thead>
       <tbody>
-        {report.expenseByCategory.map((category, index) => (
+        {shares.map((category, index) => (
           <tr key={`${index}-${category.categoryName}`}>
             <td className={styles.categoryCell}>{category.categoryName}</td>
             <td className={styles.numeric}>{formatAmount(category.amount)}</td>
@@ -108,7 +119,16 @@ export function ChartPage() {
       <>
         <ReportSummary report={report} />
         <ReportCharts report={report} />
-        <ExpenseTable report={report} />
+        <CategoryTable
+          caption="支出分類明細"
+          emptyText="本月無支出"
+          shares={report.expenseByCategory}
+        />
+        <CategoryTable
+          caption="收入分類明細"
+          emptyText="本月無收入"
+          shares={report.incomeByCategory}
+        />
       </>
     );
   };

@@ -1,5 +1,5 @@
 /**
- * report 領域的 Then：T12（月度摘要回覆）、T13（支出分類佔比；LINE 與 LIFF 兩個分支）、T14（圖表連結）。
+ * report 領域的 Then：T12（月度摘要回覆）、T13（支出 / 收入分類佔比；LINE 與 LIFF 兩個分支）、T14（圖表連結）。
  * 文字必須與 specs/features/report/*.feature 逐字一致（含全形「：」）。
  *
  * 摘要文字格式（ASM-02；implementation-plan P5-4）：
@@ -10,6 +10,8 @@
  *   支出分類：                      <- 無支出時整個區塊省略
  *   ・餐飲 300 元（75.0%）
  *   ・其他 100 元（25.0%）
+ *   收入分類：                      <- 無收入時整個區塊省略（固定在支出分類之後）
+ *   ・薪資 50000 元（100.0%）
  * 回覆為「單次 reply、兩則訊息」：[0] 摘要文字、[1] buttons template（URI action「查看圖表」）。
  *
  * T13 來源判斷：`world.lastResponse` 存在 → LIFF 回應（`expenseByCategory`，P7 使用）；否則 → LINE 回覆。
@@ -37,10 +39,21 @@ interface ParsedSummary {
   income: string;
   expense: string;
   balance: string;
-  /** 是否出現「支出分類：」標題行。 */
-  hasCategoryBlock: boolean;
+  blocks: Record<TShareKind, ParsedCategoryBlock>;
+}
+
+type TShareKind = 'expense' | 'income';
+
+interface ParsedCategoryBlock {
+  /** 是否出現「支出分類：」/「收入分類：」標題行。 */
+  present: boolean;
   categories: ParsedCategoryLine[];
 }
+
+const SHARE_KINDS: Record<TShareKind, { title: string; label: string; field: string }> = {
+  expense: { title: '支出分類：', label: '支出', field: 'expenseByCategory' },
+  income: { title: '收入分類：', label: '收入', field: 'incomeByCategory' },
+};
 
 const HEADER_PATTERN = /^【(個人|公司)】(\d{4}-\d{2}) 月度摘要$/;
 const CATEGORY_LINE_PATTERN = /^・(.+) (\d+) 元（(\d+\.\d)%）$/;
@@ -63,21 +76,34 @@ function parseSummary(text: string): ParsedSummary {
   const expense = expectLine(lines, 2, '支出合計');
   const balance = expectLine(lines, 3, '結餘');
 
-  const rest = lines.slice(4);
-  const categories: ParsedCategoryLine[] = [];
-  let hasCategoryBlock = false;
-  if (rest.length > 0) {
-    assert.equal(rest[0], '支出分類：', `第 5 行應為「支出分類：」，實際為：${rest[0]}`);
-    hasCategoryBlock = true;
-    for (const line of rest.slice(1)) {
-      const match = CATEGORY_LINE_PATTERN.exec(line);
-      assert.ok(match, `分類行應為「・{分類} {金額} 元（{佔比}%）」，實際為：${line}`);
-      categories.push({
-        name: match[1] as string,
-        amount: String(Number(match[2])),
-        ratio: `${match[3]}%`,
-      });
+  const blocks: Record<TShareKind, ParsedCategoryBlock> = {
+    expense: { present: false, categories: [] },
+    income: { present: false, categories: [] },
+  };
+  // 區塊順序固定：支出分類 → 收入分類；各自可省略
+  const order: TShareKind[] = ['expense', 'income'];
+  let current: ParsedCategoryBlock | null = null;
+  for (const line of lines.slice(4)) {
+    const kindIndex = order.findIndex((kind) => SHARE_KINDS[kind].title === line);
+    if (kindIndex >= 0) {
+      const kind = order[kindIndex] as TShareKind;
+      assert.ok(!blocks[kind].present, `「${line}」重複出現`);
+      assert.ok(
+        !order.slice(kindIndex + 1).some((later) => blocks[later].present),
+        `區塊順序應為「支出分類」→「收入分類」：${JSON.stringify(lines)}`,
+      );
+      current = blocks[kind];
+      current.present = true;
+      continue;
     }
+    assert.ok(current, `第 5 行應為「支出分類：」或「收入分類：」，實際為：${line}`);
+    const match = CATEGORY_LINE_PATTERN.exec(line);
+    assert.ok(match, `分類行應為「・{分類} {金額} 元（{佔比}%）」，實際為：${line}`);
+    current.categories.push({
+      name: match[1] as string,
+      amount: String(Number(match[2])),
+      ratio: `${match[3]}%`,
+    });
   }
 
   return {
@@ -86,8 +112,7 @@ function parseSummary(text: string): ParsedSummary {
     income,
     expense,
     balance,
-    hasCategoryBlock,
-    categories,
+    blocks,
   };
 }
 
@@ -141,13 +166,14 @@ Then('月度摘要回覆應為：', function (this: TestWorld, table: DataTable)
   assertSameRows('月度摘要', actual, expected);
 });
 
-/** 取得 LIFF 回應的 expenseByCategory（欄位 → 分類 / 金額 / 佔比 字串）。 */
-function liffCategoryRows(world: TestWorld): ParsedCategoryLine[] {
+/** 取得 LIFF 回應的 expenseByCategory / incomeByCategory（欄位 → 分類 / 金額 / 佔比 字串）。 */
+function liffCategoryRows(world: TestWorld, kind: TShareKind): ParsedCategoryLine[] {
   const response = world.lastResponse;
   assert.ok(response, '尚未發出任何 LIFF 請求');
   assert.equal(response.status, 200, `預期 HTTP 200，實際 ${response.status}：${response.text}`);
-  const list: unknown = response.body?.expenseByCategory;
-  assert.ok(Array.isArray(list), `回應必須含 expenseByCategory 陣列：${response.text}`);
+  const { field } = SHARE_KINDS[kind];
+  const list: unknown = response.body?.[field];
+  assert.ok(Array.isArray(list), `回應必須含 ${field} 陣列：${response.text}`);
   return (list as Array<{ categoryName: string; amount: number; ratio: number }>).map((item) => ({
     name: item.categoryName,
     amount: String(item.amount),
@@ -155,13 +181,13 @@ function liffCategoryRows(world: TestWorld): ParsedCategoryLine[] {
   }));
 }
 
-function actualCategoryRows(world: TestWorld): ParsedCategoryLine[] {
-  if (world.lastResponse) return liffCategoryRows(world);
-  return parseFirstMessageAsSummary(world).categories;
+function actualCategoryRows(world: TestWorld, kind: TShareKind): ParsedCategoryLine[] {
+  if (world.lastResponse) return liffCategoryRows(world, kind);
+  return parseFirstMessageAsSummary(world).blocks[kind].categories;
 }
 
-// T13：依金額由大到小；順序必須完全相同
-Then('支出分類佔比應為：', function (this: TestWorld, table: DataTable) {
+function assertShares(world: TestWorld, kind: TShareKind, table: DataTable): void {
+  const { label } = SHARE_KINDS[kind];
   const headers = table.raw()[0] ?? [];
   const expected: Canon[] = table.hashes().map((row) => {
     const canon: Canon = {};
@@ -171,28 +197,47 @@ Then('支出分類佔比應為：', function (this: TestWorld, table: DataTable)
     }
     return canon;
   });
-  const actual: Canon[] = actualCategoryRows(this).map((row) => {
+  const actual: Canon[] = actualCategoryRows(world, kind).map((row) => {
     const all: Record<string, string> = { 分類: row.name, 金額: row.amount, 佔比: row.ratio };
     return Object.fromEntries(
       headers.map((header) => {
         const value = all[header];
-        assert.ok(value !== undefined, `支出分類佔比不支援的欄位：${header}`);
+        assert.ok(value !== undefined, `${label}分類佔比不支援的欄位：${header}`);
         return [header, value];
       }),
     );
   });
-  assertSameRows('支出分類佔比', actual, expected);
-});
+  assertSameRows(`${label}分類佔比`, actual, expected);
+}
 
-// T13（空）：LINE 先確認「確有摘要回覆」再確認無分類區塊，避免「沒回覆」被誤判為「無分類」
-Then('支出分類佔比應為空', function (this: TestWorld) {
-  if (this.lastResponse) {
-    assert.deepEqual(liffCategoryRows(this), [], 'expenseByCategory 應為空陣列');
+// LINE 先確認「確有摘要回覆」再確認無分類區塊，避免「沒回覆」被誤判為「無分類」
+function assertNoShares(world: TestWorld, kind: TShareKind): void {
+  const { label, field, title } = SHARE_KINDS[kind];
+  if (world.lastResponse) {
+    assert.deepEqual(liffCategoryRows(world, kind), [], `${field} 應為空陣列`);
     return;
   }
-  const summary = parseFirstMessageAsSummary(this);
-  assert.equal(summary.hasCategoryBlock, false, '無支出時不應出現「支出分類：」區塊');
-  assert.deepEqual(summary.categories, [], '無支出時不應列出任何分類行');
+  const block = parseFirstMessageAsSummary(world).blocks[kind];
+  assert.equal(block.present, false, `無${label}時不應出現「${title}」區塊`);
+  assert.deepEqual(block.categories, [], `無${label}時不應列出任何分類行`);
+}
+
+// T13：依金額由大到小；順序必須完全相同
+Then('支出分類佔比應為：', function (this: TestWorld, table: DataTable) {
+  assertShares(this, 'expense', table);
+});
+
+Then('收入分類佔比應為：', function (this: TestWorld, table: DataTable) {
+  assertShares(this, 'income', table);
+});
+
+// T13（空）
+Then('支出分類佔比應為空', function (this: TestWorld) {
+  assertNoShares(this, 'expense');
+});
+
+Then('收入分類佔比應為空', function (this: TestWorld) {
+  assertNoShares(this, 'income');
 });
 
 // T14：第二則 buttons template 的 URI action；解析 query 的 month、ledger（中文 → enum）

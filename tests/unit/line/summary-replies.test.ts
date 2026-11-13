@@ -44,6 +44,7 @@ function report(overrides: Partial<MonthlyReport> = {}): MonthlyReport {
       { categoryId: 1, categoryName: '餐飲', amount: 300, ratio: 75 },
       { categoryId: 2, categoryName: '其他', amount: 100, ratio: 25 },
     ],
+    incomeByCategory: [],
     ...overrides,
   };
 }
@@ -62,6 +63,25 @@ describe('[Smoke] buildSummaryReply：規格範例逐字比對', () => {
         '・其他 100 元（25.0%）',
       ].join('\n'),
     });
+  });
+
+  it('有收入分類時接在支出分類之後', () => {
+    const text = buildSummaryReply(
+      report({
+        incomeByCategory: [
+          { categoryId: 3, categoryName: '薪資', amount: 50000, ratio: 83.3 },
+          { categoryId: 4, categoryName: '獎金', amount: 10000, ratio: 16.7 },
+        ],
+      }),
+    ).text;
+    expect(text.split('\n').slice(4)).toEqual([
+      '支出分類：',
+      '・餐飲 300 元（75.0%）',
+      '・其他 100 元（25.0%）',
+      '收入分類：',
+      '・薪資 50000 元（83.3%）',
+      '・獎金 10000 元（16.7%）',
+    ]);
   });
 
   it('公司 2026-11：66.7% / 33.3%', () => {

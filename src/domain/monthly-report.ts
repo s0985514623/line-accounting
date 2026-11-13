@@ -3,9 +3,9 @@
  * LINE 月度文字摘要（P5）與 LIFF 統計 API（P7 GET /api/reports/monthly）共用同一份 MonthlyReport。
  *
  *  - balance = incomeTotal - expenseTotal（可為負）。
- *  - expenseByCategory 只含支出；ratio = Math.round(amount * 1000 / expenseTotal) / 10（0–100，小數一位），
- *    不做「總和補足 100」的調整。
- *  - 排序：金額降冪、同額 categoryId 升冪（ASM-09）。無支出 → []。
+ *  - expenseByCategory / incomeByCategory 分別只含支出 / 收入；
+ *    ratio = Math.round(amount * 1000 / 該收支合計) / 10（0–100，小數一位），不做「總和補足 100」的調整。
+ *  - 排序：金額降冪、同額 categoryId 升冪（ASM-09）。該收支無紀錄 → []。
  * 依據：specs/features/report/查詢月度文字摘要.feature、查詢月度統計圖表.feature；implementation-plan P5-2。
  */
 import type { EntryType, Ledger } from './enums';
@@ -18,13 +18,16 @@ export interface CategoryTotalRow {
   amount: number;
 }
 
-/** 支出分類的金額與佔比（%）。 */
-export interface ExpenseCategoryShare {
+/** 分類的金額與佔比（%；分母為同收支合計）。 */
+export interface CategoryShare {
   categoryId: number;
   categoryName: string;
   amount: number;
   ratio: number;
 }
+
+/** @deprecated 改用 CategoryShare */
+export type ExpenseCategoryShare = CategoryShare;
 
 export interface MonthlyReport {
   ledger: Ledger;
@@ -33,7 +36,8 @@ export interface MonthlyReport {
   incomeTotal: number;
   expenseTotal: number;
   balance: number;
-  expenseByCategory: ExpenseCategoryShare[];
+  expenseByCategory: CategoryShare[];
+  incomeByCategory: CategoryShare[];
 }
 
 export interface MonthlyReportInput {
@@ -49,12 +53,25 @@ function toRatio(amount: number, total: number): number {
 }
 
 /** 金額降冪、同額 categoryId 升冪（ASM-09）。 */
-function compareShares(a: ExpenseCategoryShare, b: ExpenseCategoryShare): number {
+function compareShares(a: CategoryShare, b: CategoryShare): number {
   return b.amount - a.amount || a.categoryId - b.categoryId;
 }
 
 function sumAmounts(rows: readonly CategoryTotalRow[]): number {
   return rows.reduce((total, row) => total + row.amount, 0);
+}
+
+/** 同收支的列 → 佔比清單（已排序）；total 為 0 → []。 */
+function toShares(rows: readonly CategoryTotalRow[], total: number): CategoryShare[] {
+  if (total <= 0) return [];
+  return rows
+    .map((row) => ({
+      categoryId: row.categoryId,
+      categoryName: row.categoryName,
+      amount: row.amount,
+      ratio: toRatio(row.amount, total),
+    }))
+    .sort(compareShares);
 }
 
 /** 由彙總列計算月度報表（純函式，不修改輸入）。 */
@@ -64,17 +81,8 @@ export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
   const incomeTotal = sumAmounts(incomeRows);
   const expenseTotal = sumAmounts(expenseRows);
 
-  const expenseByCategory =
-    expenseTotal > 0
-      ? expenseRows
-          .map((row) => ({
-            categoryId: row.categoryId,
-            categoryName: row.categoryName,
-            amount: row.amount,
-            ratio: toRatio(row.amount, expenseTotal),
-          }))
-          .sort(compareShares)
-      : [];
+  const expenseByCategory = toShares(expenseRows, expenseTotal);
+  const incomeByCategory = toShares(incomeRows, incomeTotal);
 
   return {
     ledger: input.ledger,
@@ -83,5 +91,6 @@ export function buildMonthlyReport(input: MonthlyReportInput): MonthlyReport {
     expenseTotal,
     balance: incomeTotal - expenseTotal,
     expenseByCategory,
+    incomeByCategory,
   };
 }

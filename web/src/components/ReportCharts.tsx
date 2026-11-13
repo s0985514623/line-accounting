@@ -59,14 +59,17 @@ type TReportChartsProps = {
 };
 
 /**
- * 月度統計圖表：收支長條圖 + 支出分類圓餅圖（無支出時不畫圓餅）。
+ * 月度統計圖表：收支長條圖 + 支出 / 收入分類圓餅圖（該收支無紀錄時不畫該圓餅）。
  * 圖表僅為視覺輔助，所有數值另以合計區與明細表的文字呈現，因此對輔助科技隱藏（aria-hidden）。
  */
 export function ReportCharts({ report }: TReportChartsProps) {
   const barData = [
     { name: report.month, income: report.incomeTotal, expense: report.expenseTotal },
   ];
-  const pieSlices = toPieSlices(report.expenseByCategory);
+  const pies = [
+    { caption: '支出分類佔比', slices: toPieSlices(report.expenseByCategory) },
+    { caption: '收入分類佔比', slices: toPieSlices(report.incomeByCategory) },
+  ].filter((pie) => pie.slices.length > 0);
 
   return (
     <div className={styles.charts} aria-hidden="true">
@@ -102,13 +105,13 @@ export function ReportCharts({ report }: TReportChartsProps) {
         </ResponsiveContainer>
       </figure>
 
-      {pieSlices.length > 0 ? (
-        <figure className={styles.card}>
-          <figcaption className={styles.caption}>支出分類佔比</figcaption>
+      {pies.map(({ caption, slices }) => (
+        <figure key={caption} className={styles.card}>
+          <figcaption className={styles.caption}>{caption}</figcaption>
           <ResponsiveContainer width="100%" height={CHART_HEIGHT + 40}>
             <PieChart accessibilityLayer={false}>
               <Pie
-                data={pieSlices}
+                data={slices}
                 dataKey="amount"
                 nameKey="name"
                 innerRadius="50%"
@@ -122,7 +125,7 @@ export function ReportCharts({ report }: TReportChartsProps) {
             </PieChart>
           </ResponsiveContainer>
         </figure>
-      ) : null}
+      ))}
     </div>
   );
 }

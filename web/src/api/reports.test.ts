@@ -62,6 +62,7 @@ describe('api/reports / fetchMonthlyReport', () => {
         expenseTotal: 320,
         balance: 49680,
         expenseByCategory: [{ categoryName: '餐飲', amount: 320, ratio: 100 }],
+        incomeByCategory: [{ categoryName: '薪資', amount: 50000, ratio: 100 }],
       });
       const [req] = requestsTo('GET', '/api/reports/monthly');
       expect(req?.query).toEqual({ month: '2026-11', ledger: 'personal' });
