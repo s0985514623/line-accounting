@@ -1,32 +1,38 @@
 import { useRef, useState } from 'react';
-import { Link } from 'react-router';
-import type { TLedger, TTransaction } from '../api/schemas';
+import { Link, useLocation, useSearchParams } from 'react-router';
+import { ledgerSchema, type TLedger, type TTransaction } from '../api/schemas';
 import { useDeleteTransaction, useTransactions } from '../api/transactions';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LedgerToggle } from '../components/LedgerToggle';
 import { LoadingStatus } from '../components/LoadingStatus';
 import { MonthPicker } from '../components/MonthPicker';
-import { formatShortDate, taipeiCurrentMonth } from '../lib/date';
+import { formatShortDate, isValidMonth, taipeiCurrentMonth } from '../lib/date';
 import { createEditRouteState } from '../lib/edit-route-state';
 import { formatAmount } from '../lib/format';
 import styles from './TransactionListPage.module.css';
 
 type TTransactionRowProps = {
   transaction: TTransaction;
+  /** 編輯後要回到的列表路徑（含月份 / 帳本） */
+  returnTo: string;
   onDelete: (transaction: TTransaction) => void;
 };
 
 /**
  * 列表中的單筆紀錄：整列為編輯連結，右側為刪除按鈕。
  */
-function TransactionRow({ transaction, onDelete }: TTransactionRowProps) {
+function TransactionRow({ transaction, returnTo, onDelete }: TTransactionRowProps) {
   const { id, item, note, amount, entryType, categoryName, occurredOn } = transaction;
   const isIncome = entryType === 'income';
 
   return (
     <li className={styles.row}>
-      <Link to={`/edit/${id}`} state={createEditRouteState(transaction)} className={styles.rowLink}>
+      <Link
+        to={`/edit/${id}`}
+        state={createEditRouteState(transaction, returnTo)}
+        className={styles.rowLink}
+      >
         <span className={styles.rowMain}>
           <span className={styles.item}>{item}</span>
           {note ? <span className={styles.note}>{note}</span> : null}
@@ -53,10 +59,23 @@ function TransactionRow({ transaction, onDelete }: TTransactionRowProps) {
 /**
  * 記帳紀錄列表頁（/liff/）：月份與帳本篩選、列表、刪除確認。
  * 列表順序依 API 回傳（日期新到舊、同日 id 大到小），前端不重排。
+ * 月份與帳本放在網址（?month=YYYY-MM&ledger=），從編輯頁返回時維持原本的月份 / 帳本；
+ * 缺省或不合法時為本月（Asia/Taipei）/ 個人。
  */
 export function TransactionListPage() {
-  const [month, setMonth] = useState(() => taipeiCurrentMonth());
-  const [ledger, setLedger] = useState<TLedger>('personal');
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const rawMonth = searchParams.get('month') ?? '';
+  const month = isValidMonth(rawMonth) ? rawMonth : taipeiCurrentMonth();
+  const parsedLedger = ledgerSchema.safeParse(searchParams.get('ledger'));
+  const ledger: TLedger = parsedLedger.success ? parsedLedger.data : 'personal';
+  const returnTo = `${location.pathname}${location.search}`;
+
+  const updateParams = (next: { month: string; ledger: TLedger }) => {
+    setSearchParams({ month: next.month, ledger: next.ledger }, { replace: true });
+  };
+  const setMonth = (nextMonth: string) => updateParams({ month: nextMonth, ledger });
+  const setLedger = (nextLedger: TLedger) => updateParams({ month, ledger: nextLedger });
   const [pendingDelete, setPendingDelete] = useState<TTransaction | null>(null);
   const isDeletingRef = useRef(false);
 
@@ -92,6 +111,7 @@ export function TransactionListPage() {
           <TransactionRow
             key={transaction.id}
             transaction={transaction}
+            returnTo={returnTo}
             onDelete={handleRequestDelete}
           />
         ))}

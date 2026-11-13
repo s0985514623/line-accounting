@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import type { TCategoryShare, TEntryType, TLedger, TTransaction } from '../api/schemas';
 import { useTransactions } from '../api/transactions';
 import { formatShortDate } from '../lib/date';
@@ -45,6 +45,7 @@ export function CategoryDrilldown({
   scrollIntoView = false,
 }: TCategoryDrilldownProps) {
   const query = useTransactions(month, ledger);
+  const location = useLocation();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -62,7 +63,7 @@ export function CategoryDrilldown({
           <li key={transaction.id}>
             <Link
               to={`/edit/${transaction.id}`}
-              state={createEditRouteState(transaction)}
+              state={createEditRouteState(transaction, `${location.pathname}${location.search}`)}
               className={styles.link}
             >
               <span className={styles.date}>{formatShortDate(transaction.occurredOn)}</span>
