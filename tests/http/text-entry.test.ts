@@ -29,7 +29,8 @@ import {
   type WebhookHarness,
 } from './support/webhook-harness';
 
-const FORMAT_HELP = '格式：[公 ][+]項目 金額[ 備註]，例如：午餐 120、公 +顧問費 30000 A客戶';
+const FORMAT_HELP =
+  '格式：[公 ][日期 ][+]項目 金額[ 備註]，例如：午餐 120、昨天 午餐 120、公 11/10 +顧問費 30000 A客戶；多筆請分行輸入';
 const NOT_ALLOWED = '此服務不開放使用';
 const NOTE_TOO_LONG = '備註太長，請縮短後重新傳送，或改用表單記帳';
 

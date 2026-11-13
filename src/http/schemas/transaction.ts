@@ -34,6 +34,14 @@ export const TransactionInputSchema = z.object({
   note: NoteSchema,
 });
 
+/** 批次記帳一次最多筆數。 */
+export const TRANSACTION_BATCH_MAX_ITEMS = 50;
+
+/** POST /api/transactions/batch 的 body。 */
+export const TransactionBatchInputSchema = z.object({
+  items: z.array(TransactionInputSchema).min(1).max(TRANSACTION_BATCH_MAX_ITEMS),
+});
+
 /** GET /api/transactions 的 query：month、ledger 皆必填。 */
 export const ListTransactionsQuerySchema = z.object({
   month: MonthSchema,

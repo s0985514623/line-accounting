@@ -89,3 +89,26 @@ Table postback_tokens {
   此表只記錄已使用的 token。對應紀錄被刪除時 ON DELETE SET NULL（token 仍視為已使用）。
   '''
 }
+
+Table pending_entries {
+  id          integer     [pk, increment]
+  batch_id    varchar(64) [not null, note: '同一則 LINE 批次訊息共用']
+  seq         integer     [not null, note: '原訊息行號，決定詢問分類的順序']
+  ledger      ledger      [not null]
+  entry_type  entry_type  [not null]
+  item        varchar(50) [not null]
+  amount      integer     [not null, note: 'CHECK amount > 0']
+  occurred_on date        [not null]
+  note        text        [null]
+  created_at  timestamp   [not null, default: `now()`]
+
+  indexes {
+    (batch_id, seq)
+    created_at
+  }
+
+  Note: '''
+  LINE 多行批次記帳中對應不到分類的項目。依 seq 逐筆以分類按鈕（action=bpick&id=）詢問，
+  選定後刪除本列並寫入 transactions。保留 7 天，逾期於下次批次記帳時清除。
+  '''
+}

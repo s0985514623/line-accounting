@@ -109,6 +109,9 @@ export function TransactionListPage() {
       </header>
 
       <nav aria-label="功能選單" className={styles.nav}>
+        <Link to="/batch" className={styles.navLink}>
+          批次記帳
+        </Link>
         <Link to="/categories" className={styles.navLink}>
           分類管理
         </Link>

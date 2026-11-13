@@ -4,7 +4,7 @@
 
 /** 文字記帳格式說明（transaction/以文字訊息記帳.feature；系統抽象.md）。 */
 export const FORMAT_HELP_TEXT =
-  '格式：[公 ][+]項目 金額[ 備註]，例如：午餐 120、公 +顧問費 30000 A客戶';
+  '格式：[公 ][日期 ][+]項目 金額[ 備註]，例如：午餐 120、昨天 午餐 120、公 11/10 +顧問費 30000 A客戶；多筆請分行輸入';
 
 /** 白名單使用者加好友時的歡迎訊息（access/加入好友.feature）。 */
 export const WELCOME_TEXT = `歡迎使用 LINE 記帳！${FORMAT_HELP_TEXT}`;
@@ -44,3 +44,27 @@ export const RECORD_NOT_FOUND_TEXT = '此紀錄已不存在';
 
 /** 刪除確認提示選擇「取消」（transaction/確認刪除記帳紀錄.feature）。 */
 export const DELETE_CANCELLED_TEXT = '已取消刪除';
+
+/** 日期前綴在日曆上不存在（例：2/30）或月 / 日超出範圍。 */
+export const DATE_INVALID_TEXT = '日期不存在';
+
+/** 日期前綴晚於今天。 */
+export const DATE_FUTURE_TEXT = '日期不可晚於今天';
+
+/** 批次記帳一次最多行數。 */
+export const MAX_BATCH_LINES = 30;
+
+/** 批次記帳超過行數上限。 */
+export const BATCH_TOO_MANY_LINES_TEXT = `一次最多 ${MAX_BATCH_LINES} 筆，請分次傳送`;
+
+/** 批次中某行格式錯誤（逐行列出時使用，完整格式說明另附一次）。 */
+export const BATCH_LINE_FORMAT_ERROR_TEXT = '格式錯誤';
+
+/** 批次中出現單行指令（本月 / 上月 / 待分類）。 */
+export const BATCH_LINE_COMMAND_TEXT = '指令請單獨傳送';
+
+/** 「待分類」但沒有待分類項目。 */
+export const NO_PENDING_TEXT = '目前沒有待分類的項目';
+
+/** 批次待分類項目全部完成。 */
+export const BATCH_ALL_DONE_TEXT = '批次項目已全部分類完成';

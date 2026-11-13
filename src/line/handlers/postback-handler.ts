@@ -6,6 +6,9 @@
  *      recorded → 已記帳摘要 + 刪除按鈕；alreadyUsed → 此筆已記帳；
  *      categoryNotFound → 分類不存在，請重新記帳；categoryMismatch → 分類不符，請重新記帳。
  *    非預期例外不在此吞掉，交由 event-dispatcher 回「系統忙碌」。
+ *  - bpick（批次待分類項目的分類按鈕）→ completeBatchPick：
+ *      recorded → [已記帳摘要 + 刪除按鈕, (同批次自動記帳清單), 下一筆分類 Quick Reply 或「全部完成」]；
+ *      alreadyUsed / categoryNotFound / categoryMismatch → 同 pick 的文字。
  *  - delete（刪除按鈕）→ findSummaryById：存在 → 「確定刪除？…」confirm template；不存在 → 此紀錄已不存在。
  *  - delete_confirm（確定）→ deleteById：deleted → 已刪除：…；notFound → 此紀錄已不存在。
  *  - delete_cancel（取消）→ findSummaryById：存在 → 已取消刪除；不存在 → 此紀錄已不存在。絕不刪除。
@@ -19,11 +22,17 @@ import {
   type PostbackPayload,
 } from '../../domain/postback-codec';
 import type { LineMessage } from '../../ports/line-reply-gateway';
-import type { CompletePickResult, TransactionService } from '../../services/transaction-service';
+import type {
+  CompleteBatchPickResult,
+  CompletePickResult,
+  TransactionService,
+} from '../../services/transaction-service';
+import { buildAutoRecordedText, buildPendingPrompt } from '../messages/batch-replies';
 import { textMessage } from '../messages/builders';
 import { buildDeleteConfirmReply, buildDeletedReply } from '../messages/delete-replies';
 import { buildRecordedReply } from '../messages/entry-replies';
 import {
+  BATCH_ALL_DONE_TEXT,
   DELETE_CANCELLED_TEXT,
   PICK_ALREADY_USED_TEXT,
   PICK_CATEGORY_MISMATCH_TEXT,
@@ -38,7 +47,10 @@ export interface IncomingPostback {
   data: string;
 }
 
-type PickFailureKind = Exclude<CompletePickResult['kind'], 'recorded'>;
+type PickFailureKind = Exclude<
+  CompletePickResult['kind'] | CompleteBatchPickResult['kind'],
+  'recorded'
+>;
 
 const PICK_FAILURE_TEXTS: Readonly<Record<PickFailureKind, string>> = {
   alreadyUsed: PICK_ALREADY_USED_TEXT,
@@ -50,7 +62,7 @@ export class PostbackHandler {
   constructor(
     private readonly transactions: Pick<
       TransactionService,
-      'completePick' | 'findSummaryById' | 'deleteById'
+      'completePick' | 'completeBatchPick' | 'findSummaryById' | 'deleteById'
     >,
     private readonly logger: Logger,
   ) {}
@@ -64,23 +76,35 @@ export class PostbackHandler {
     }
 
     // 先取得回覆內容再回覆：service 例外往外拋時不會先用掉一次性的 reply token
-    const message = await this.resolveReply(payload);
-    await replier.reply([message]);
+    const messages = await this.resolveReply(payload);
+    await replier.reply(messages);
   }
 
-  private async resolveReply(payload: PostbackPayload): Promise<LineMessage> {
+  private async resolveReply(payload: PostbackPayload): Promise<LineMessage[]> {
     switch (payload.action) {
       case 'pick': {
         const { action: _action, ...pick } = payload;
-        return this.completePick(pick);
+        return [await this.completePick(pick)];
       }
+      case 'bpick':
+        return this.completeBatchPick(payload.pendingId, payload.categoryId);
       case 'delete':
-        return this.requestDelete(payload.id);
+        return [await this.requestDelete(payload.id)];
       case 'delete_confirm':
-        return this.confirmDelete(payload.id);
+        return [await this.confirmDelete(payload.id)];
       case 'delete_cancel':
-        return this.cancelDelete(payload.id);
+        return [await this.cancelDelete(payload.id)];
     }
+  }
+
+  private async completeBatchPick(pendingId: number, categoryId: number): Promise<LineMessage[]> {
+    const result = await this.transactions.completeBatchPick(pendingId, categoryId);
+    if (result.kind !== 'recorded') return [textMessage(PICK_FAILURE_TEXTS[result.kind])];
+
+    const messages: LineMessage[] = [buildRecordedReply(result.picked)];
+    if (result.autoRecorded.length > 0) messages.push(buildAutoRecordedText(result.autoRecorded));
+    messages.push(result.next ? buildPendingPrompt(result.next) : textMessage(BATCH_ALL_DONE_TEXT));
+    return messages;
   }
 
   private async requestDelete(id: number): Promise<LineMessage> {

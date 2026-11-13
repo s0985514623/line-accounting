@@ -101,3 +101,52 @@ export function resolveSummaryMonth(period: SummaryPeriod, now: Date): string {
   const thisMonth = todayInTaipei(now).slice(0, 7);
   return period === 'this_month' ? thisMonth : previousMonth(thisMonth);
 }
+
+/** 文字記帳的日期前綴（未解析成實際日期）。 */
+export type EntryDateSpec =
+  | { kind: 'relative'; daysAgo: number }
+  /** year 為 null 時取「不晚於今天的最近一次」該月日 */
+  | { kind: 'calendar'; year: number | null; month: number; day: number };
+
+export type ResolveEntryDateResult =
+  | { ok: true; date: string }
+  /** 日曆上不存在（2026/2/30） */
+  | { ok: false; reason: 'invalid' }
+  /** 晚於今天 */
+  | { ok: false; reason: 'future' };
+
+function formatDateOnlyParts(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** 'YYYY-MM-DD' 往前 days 天。 */
+export function subtractDays(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number) as [number, number, number];
+  const value = new Date(0);
+  value.setUTCFullYear(year, month - 1, day - days);
+  return formatDateOnlyParts(value.getUTCFullYear(), value.getUTCMonth() + 1, value.getUTCDate());
+}
+
+/**
+ * 將日期前綴換算成 'YYYY-MM-DD'。spec 為 null → 今天。
+ * 無年份時：今年該月日晚於今天 → 改用去年（例：今天 2026-01-05，「12/31」→ 2025-12-31）。
+ * @param today Asia/Taipei 的今天（'YYYY-MM-DD'）
+ */
+export function resolveEntryDate(
+  spec: EntryDateSpec | null,
+  today: string,
+): ResolveEntryDateResult {
+  if (spec === null) return { ok: true, date: today };
+  if (spec.kind === 'relative') return { ok: true, date: subtractDays(today, spec.daysAgo) };
+
+  const thisYear = Number(today.slice(0, 4));
+  let year = spec.year ?? thisYear;
+  let date = formatDateOnlyParts(year, spec.month, spec.day);
+  if (spec.year === null && date > today) {
+    year -= 1;
+    date = formatDateOnlyParts(year, spec.month, spec.day);
+  }
+  if (!isValidDateOnly(date)) return { ok: false, reason: 'invalid' };
+  if (date > today) return { ok: false, reason: 'future' };
+  return { ok: true, date };
+}

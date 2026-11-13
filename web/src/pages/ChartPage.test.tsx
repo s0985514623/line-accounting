@@ -64,7 +64,11 @@ function detailRows() {
   return within(table)
     .getAllByRole('row')
     .slice(1)
-    .map((row) => within(row).getAllByRole('cell').map((c) => c.textContent?.trim()));
+    .map((row) =>
+      within(row)
+        .getAllByRole('cell')
+        .map((c) => c.textContent?.trim()),
+    );
 }
 
 function reportBody(overrides: Record<string, unknown> = {}) {
@@ -331,9 +335,7 @@ describe('ChartPage', () => {
 
       await user.click(screen.getByRole('radio', { name: '公司' }));
 
-      await waitFor(() =>
-        expect(detailRows()).toEqual([['文具', '300', '100.0%']]),
-      );
+      await waitFor(() => expect(detailRows()).toEqual([['文具', '300', '100.0%']]));
       expect(requestsTo('GET', '/api/reports/monthly').at(-1)?.query).toEqual({
         month: '2026-11',
         ledger: 'company',
@@ -445,7 +447,12 @@ describe('ChartPage', () => {
   });
 
   describe('Edge：網址參數不合法', () => {
-    it.each(['?month=2026-13&ledger=personal', '?month=202611', '?ledger=family', '?month=&ledger='])(
+    it.each([
+      '?month=2026-13&ledger=personal',
+      '?month=202611',
+      '?ledger=family',
+      '?month=&ledger=',
+    ])(
       '%s → 頁面不白畫面：標題仍在，且最後呈現報表或錯誤訊息其一（採用何者由實作決定，不得停在載入中）',
       async (search) => {
         renderChart(search);

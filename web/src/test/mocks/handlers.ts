@@ -273,6 +273,36 @@ export const handlers = [
     return HttpResponse.json(created, { status: 201 });
   }),
 
+  http.post('*/api/transactions/batch', async ({ request }) => {
+    const denied = checkAuth(request);
+    if (denied) return denied;
+    const body: unknown = await request
+      .clone()
+      .json()
+      .catch(() => undefined);
+    const rawItems = (body as { items?: unknown } | undefined)?.items;
+    if (!Array.isArray(rawItems) || rawItems.length === 0 || rawItems.length > 50) {
+      return errorResponse(400, 'INVALID_ARGUMENT');
+    }
+    const parsedItems = rawItems.map((raw) => parseInput(raw));
+    for (const parsed of parsedItems) {
+      if ('error' in parsed) return parsed.error;
+    }
+    const items = parsedItems.map((parsed) => {
+      if ('error' in parsed) throw new Error('unreachable');
+      const category = categories.find((c) => c.id === parsed.value.categoryId)!;
+      const created: TransactionRow = {
+        id: nextId++,
+        ...parsed.value,
+        categoryName: category.name,
+        source: 'liff_form',
+      };
+      transactions.push(created);
+      return created;
+    });
+    return HttpResponse.json({ items }, { status: 201 });
+  }),
+
   http.put('*/api/transactions/:id', async ({ request, params }) => {
     const denied = checkAuth(request);
     if (denied) return denied;

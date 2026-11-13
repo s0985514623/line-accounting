@@ -82,7 +82,13 @@ export function getSharedPrisma(): PrismaClient {
 
 // ---- 資料表操作 ----------------------------------------------------------------------------
 
-export const ALL_TABLES = ['categories', 'category_keywords', 'transactions', 'postback_tokens'];
+export const ALL_TABLES = [
+  'categories',
+  'category_keywords',
+  'transactions',
+  'postback_tokens',
+  'pending_entries',
+];
 
 export async function truncateAll(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`TRUNCATE ${ALL_TABLES.join(', ')} RESTART IDENTITY CASCADE`);

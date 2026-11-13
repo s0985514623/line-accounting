@@ -99,3 +99,23 @@ model PostbackToken {
 
   @@map("postback_tokens")
 }
+
+/// LINE 批次記帳中尚未選分類的項目（依 seq 逐筆詢問；選完即刪除並寫入 transactions）。
+model PendingEntry {
+  id         Int       @id @default(autoincrement())
+  /// 同一則批次訊息共用
+  batchId    String    @map("batch_id") @db.VarChar(64)
+  /// 批次內順序（原訊息行號）
+  seq        Int
+  ledger     Ledger
+  entryType  EntryType @map("entry_type")
+  item       String    @db.VarChar(50)
+  amount     Int
+  occurredOn DateTime  @map("occurred_on") @db.Date
+  note       String?
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([batchId, seq])
+  @@index([createdAt])
+  @@map("pending_entries")
+}

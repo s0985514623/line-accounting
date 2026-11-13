@@ -38,8 +38,16 @@ export interface PickPayload {
 export const RECORD_ACTIONS = ['delete', 'delete_confirm', 'delete_cancel'] as const;
 export type RecordAction = (typeof RECORD_ACTIONS)[number];
 
+/** 批次待分類項目的分類按鈕：`action=bpick&id=<pendingId>&categoryId=<id>`。 */
+export interface BatchPickPayload {
+  pendingId: number;
+  categoryId: number;
+}
+
 export type PostbackPayload =
-  ({ action: 'pick' } & PickPayload) | { action: RecordAction; id: number };
+  | ({ action: 'pick' } & PickPayload)
+  | ({ action: 'bpick' } & BatchPickPayload)
+  | { action: RecordAction; id: number };
 
 export function isPostbackDataWithinLimit(data: string): boolean {
   return data.length <= POSTBACK_DATA_MAX_LENGTH;
@@ -90,6 +98,15 @@ function encodeRecordAction(action: RecordAction, id: number): string {
   return encodePairs([
     ['action', action],
     ['id', String(id)],
+  ]);
+}
+
+/** 編碼批次待分類項目的分類按鈕 data。 */
+export function encodeBatchPick(payload: BatchPickPayload): string {
+  return encodePairs([
+    ['action', 'bpick'],
+    ['id', String(payload.pendingId)],
+    ['categoryId', String(payload.categoryId)],
   ]);
 }
 
@@ -150,6 +167,18 @@ const PickSchema = z
     categoryId: raw.categoryId,
   }));
 
+const BatchPickSchema = z
+  .strictObject({
+    action: z.literal('bpick'),
+    id: positiveIntString(MAX_INT4),
+    categoryId: positiveIntString(MAX_INT4),
+  })
+  .transform((raw): PostbackPayload => ({
+    action: 'bpick',
+    pendingId: raw.id,
+    categoryId: raw.categoryId,
+  }));
+
 function recordActionSchema(action: RecordAction): z.ZodType<PostbackPayload> {
   return z
     .strictObject({
@@ -164,6 +193,7 @@ const SCHEMAS_BY_ACTION: ReadonlyMap<string, z.ZodType<PostbackPayload>> = new M
   z.ZodType<PostbackPayload>
 >([
   ['pick', PickSchema],
+  ['bpick', BatchPickSchema],
   ...RECORD_ACTIONS.map((action) => [action, recordActionSchema(action)] as const),
 ]);
 

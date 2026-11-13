@@ -41,7 +41,11 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 describe('api/categories / createCategory', () => {
   it('Happy：POST 帶 ledger / entryType / name 與 Bearer token，回傳 isFallback=false 的新分類', async () => {
-    const created = await createCategory({ ledger: 'personal', entryType: 'expense', name: '寵物' });
+    const created = await createCategory({
+      ledger: 'personal',
+      entryType: 'expense',
+      name: '寵物',
+    });
 
     expect(created).toMatchObject({
       ledger: 'personal',

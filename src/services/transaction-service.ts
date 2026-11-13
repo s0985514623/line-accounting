@@ -14,6 +14,14 @@
  *  - token 已使用優先回 alreadyUsed；分類錯誤（不存在 / 帳本或收支不符）只讀不寫，token 不被消耗。
  *  - 併發時 insert token 撞 PK（P2002）→ 整段 rollback 並回 alreadyUsed；其他例外原樣拋出。
  *
+ * createBatchFromText / completeBatchPick / resumePending（LINE 多行批次記帳）：
+ *  - 批次：單一交易內逐行比對分類，命中即寫入；未命中寫入 pending_entries（同 batchId、seq = 行號）。
+ *    同時清掉超過 PENDING_TTL_DAYS 的舊待分類項目。回傳已記帳清單與第一筆待分類的分類選項。
+ *  - 選分類（action=bpick）：單一交易內 查 pending（不存在 → alreadyUsed）→ 分類驗證（失敗不消耗）
+ *    → 刪 pending → 寫入紀錄 → 非 fallback 分類學關鍵字 → 同批次剩餘項目重新比對
+ *    （剛學到的關鍵字可直接命中），命中者自動記帳，遇到第一筆仍未命中者停下，回傳其分類選項。
+ *  - resumePending（「待分類」指令）：回傳最早一筆待分類項目的分類選項。
+ *
  * findSummaryById / deleteById（implementation-plan P4；確認刪除記帳紀錄.feature）：
  *  - id 不是 1..int4 上限的整數 → 視為不存在，不碰資料庫。
  *  - deleteById 只執行一次 DELETE（以被刪除列組成結果）；P2025 → notFound，其他例外原樣拋出。
@@ -37,6 +45,11 @@ import type { TextEntry } from '../domain/text-entry-parser';
 import type { Clock } from '../ports/clock';
 import { CategoryRepository, type CategorySummary } from '../repositories/category-repository';
 import { KeywordRepository } from '../repositories/keyword-repository';
+import {
+  PendingEntryRepository,
+  type NewPendingEntry,
+  type PendingEntry,
+} from '../repositories/pending-entry-repository';
 import { PostbackTokenRepository } from '../repositories/postback-token-repository';
 import {
   TransactionRepository,
@@ -59,7 +72,68 @@ export interface DefaultCategoriesProvider {
   ensureDefaultCategories(): Promise<EnsureDefaultCategoriesResult>;
 }
 
-export type TextEntryInput = Omit<TextEntry, 'kind'>;
+export type TextEntryInput = Omit<TextEntry, 'kind' | 'date'> & {
+  /** YYYY-MM-DD；省略 = Asia/Taipei 的今天 */
+  occurredOn?: string;
+};
+
+/** 批次中的一行（已解析、日期已換算）。 */
+export type BatchEntryInput = Omit<TextEntry, 'kind' | 'date'> & {
+  /** 原訊息行號（1 起算），決定詢問分類的順序 */
+  line: number;
+  /** YYYY-MM-DD */
+  occurredOn: string;
+};
+
+/** 待分類項目保留天數；逾期於下次批次記帳時清除。 */
+export const PENDING_TTL_DAYS = 7;
+
+/** 已寫入的一筆記帳（批次回覆用）。 */
+export interface RecordedEntry {
+  transactionId: number;
+  ledger: Ledger;
+  entryType: EntryType;
+  item: string;
+  amount: number;
+  categoryName: string;
+  /** YYYY-MM-DD */
+  occurredOn: string;
+}
+
+/** 下一筆待分類項目與其可選分類。 */
+export interface PendingPrompt {
+  pendingId: number;
+  ledger: Ledger;
+  entryType: EntryType;
+  item: string;
+  amount: number;
+  /** YYYY-MM-DD */
+  occurredOn: string;
+  /** 同批次尚待分類的筆數（含本筆） */
+  remaining: number;
+  /** 同帳本同收支的分類，依 id 升冪 */
+  categories: CategorySummary[];
+}
+
+export interface BatchResult {
+  /** 依行號順序 */
+  recorded: RecordedEntry[];
+  pendingCount: number;
+  next: PendingPrompt | null;
+}
+
+export type CompleteBatchPickResult =
+  | {
+      kind: 'recorded';
+      picked: RecordedEntry;
+      /** 同批次後續項目因剛學到的關鍵字而自動記帳者 */
+      autoRecorded: RecordedEntry[];
+      next: PendingPrompt | null;
+    }
+  /** 項目已記帳（重複點擊、併發） */
+  | { kind: 'alreadyUsed' }
+  | { kind: 'categoryNotFound' }
+  | { kind: 'categoryMismatch' };
 
 export type CreateFromTextResult =
   | {
@@ -113,6 +187,16 @@ export type DeleteByIdResult =
   /** 紀錄不存在（含 id 不合法、重複確認刪除） */
   | { kind: 'notFound' };
 
+/** 交易內刪 pending 時已被併發刪除，用來 rollback 後轉成 alreadyUsed。 */
+class PendingConflictError extends Error {
+  constructor() {
+    super('pending entry already consumed (concurrent pick)');
+    this.name = 'PendingConflictError';
+  }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 /** 交易內 insert token 撞 PK 時拋出，用來讓整段交易 rollback 後轉成 alreadyUsed。 */
 class PickTokenConflictError extends Error {
   constructor() {
@@ -157,7 +241,7 @@ export class TransactionService {
 
   /** 以解析後的文字記帳：命中分類即記帳，否則回傳分類選擇所需資料（不寫入）。 */
   async createFromText(entry: TextEntryInput): Promise<CreateFromTextResult> {
-    const today = todayInTaipei(this.deps.clock.now());
+    const today = entry.occurredOn ?? todayInTaipei(this.deps.clock.now());
     await this.ensureCategoriesExist();
 
     const category = await this.matcher.match(entry.ledger, entry.entryType, entry.item);
@@ -181,6 +265,166 @@ export class TransactionService {
       source: 'line_text',
     });
     return { kind: 'recorded', transactionId: id, categoryName: category.name, occurredOn: today };
+  }
+
+  /** LINE 多行批次記帳：命中分類者直接寫入，其餘存成待分類並回傳第一筆的分類選項。 */
+  async createBatchFromText(entries: readonly BatchEntryInput[]): Promise<BatchResult> {
+    await this.ensureCategoriesExist();
+    const batchId = this.generateToken();
+    const expiredBefore = new Date(this.deps.clock.now().getTime() - PENDING_TTL_DAYS * DAY_MS);
+
+    return this.deps.prisma.$transaction(async (tx) => {
+      const pendingRepo = new PendingEntryRepository(tx);
+      await pendingRepo.deleteCreatedBefore(expiredBefore);
+
+      const matcher = this.matcherFor(tx);
+      const transactions = new TransactionRepository(tx);
+      const recorded: RecordedEntry[] = [];
+      const pending: NewPendingEntry[] = [];
+      for (const entry of [...entries].sort((a, b) => a.line - b.line)) {
+        const category = await matcher.match(entry.ledger, entry.entryType, entry.item);
+        if (!category) {
+          pending.push({
+            batchId,
+            seq: entry.line,
+            ledger: entry.ledger,
+            entryType: entry.entryType,
+            item: entry.item,
+            amount: entry.amount,
+            occurredOn: entry.occurredOn,
+            note: entry.note,
+          });
+          continue;
+        }
+        recorded.push(await this.recordMatched(transactions, entry, category));
+      }
+      await pendingRepo.createMany(pending);
+
+      const remaining = await pendingRepo.listByBatch(batchId);
+      return {
+        recorded,
+        pendingCount: remaining.length,
+        next: await this.buildPrompt(tx, remaining),
+      };
+    });
+  }
+
+  /** 批次待分類項目選定分類（全程單一交易）。 */
+  async completeBatchPick(pendingId: number, categoryId: number): Promise<CompleteBatchPickResult> {
+    if (!isValidRecordId(pendingId)) return { kind: 'alreadyUsed' };
+    try {
+      return await this.deps.prisma.$transaction((tx) =>
+        this.completeBatchPickInTransaction(tx, pendingId, categoryId),
+      );
+    } catch (error) {
+      if (error instanceof PendingConflictError) return { kind: 'alreadyUsed' };
+      throw error;
+    }
+  }
+
+  /** 「待分類」指令：最早一筆待分類項目的分類選項；沒有則 null。 */
+  async resumePending(): Promise<PendingPrompt | null> {
+    const pendingRepo = new PendingEntryRepository(this.deps.prisma);
+    const oldest = await pendingRepo.findOldest();
+    if (!oldest) return null;
+    return this.buildPrompt(this.deps.prisma, await pendingRepo.listByBatch(oldest.batchId));
+  }
+
+  private async completeBatchPickInTransaction(
+    tx: Prisma.TransactionClient,
+    pendingId: number,
+    categoryId: number,
+  ): Promise<CompleteBatchPickResult> {
+    const pendingRepo = new PendingEntryRepository(tx);
+    const entry = await pendingRepo.findById(pendingId);
+    if (!entry) return { kind: 'alreadyUsed' };
+
+    const category = isValidRecordId(categoryId)
+      ? await new CategoryRepository(tx).findById(categoryId)
+      : null;
+    if (!category) return { kind: 'categoryNotFound' };
+    if (category.ledger !== entry.ledger || category.entryType !== entry.entryType) {
+      return { kind: 'categoryMismatch' };
+    }
+
+    if (!(await pendingRepo.deleteById(entry.id))) throw new PendingConflictError();
+    const transactions = new TransactionRepository(tx);
+    const picked = await this.recordMatched(transactions, entry, category);
+    if (!category.isFallback) {
+      await new KeywordRepository(tx).upsert(
+        entry.ledger,
+        entry.entryType,
+        entry.item,
+        category.id,
+      );
+    }
+
+    // 同批次剩餘項目依序重新比對：剛學到的關鍵字可能讓緊接著的項目直接命中；
+    // 遇到第一筆仍未命中者即停止（之後的留待下一輪，維持「依序」詢問）。
+    const matcher = this.matcherFor(tx);
+    const autoRecorded: RecordedEntry[] = [];
+    const remaining: PendingEntry[] = [];
+    for (const next of await pendingRepo.listByBatch(entry.batchId)) {
+      const matched =
+        remaining.length === 0 ? await matcher.match(next.ledger, next.entryType, next.item) : null;
+      if (matched) {
+        if (!(await pendingRepo.deleteById(next.id))) throw new PendingConflictError();
+        autoRecorded.push(await this.recordMatched(transactions, next, matched));
+        continue;
+      }
+      remaining.push(next);
+    }
+
+    return { kind: 'recorded', picked, autoRecorded, next: await this.buildPrompt(tx, remaining) };
+  }
+
+  private matcherFor(db: Prisma.TransactionClient): CategoryMatcher {
+    return new CategoryMatcher(new CategoryRepository(db), new KeywordRepository(db));
+  }
+
+  private async recordMatched(
+    transactions: TransactionRepository,
+    entry: Omit<BatchEntryInput, 'line'>,
+    category: CategorySummary,
+  ): Promise<RecordedEntry> {
+    const { id } = await transactions.create({
+      ledger: entry.ledger,
+      entryType: entry.entryType,
+      item: entry.item,
+      amount: entry.amount,
+      categoryId: category.id,
+      occurredOn: entry.occurredOn,
+      note: entry.note,
+      source: 'line_text',
+    });
+    return {
+      transactionId: id,
+      ledger: entry.ledger,
+      entryType: entry.entryType,
+      item: entry.item,
+      amount: entry.amount,
+      categoryName: category.name,
+      occurredOn: entry.occurredOn,
+    };
+  }
+
+  /** remaining 依 seq 升冪；取第一筆組成分類選項。 */
+  private async buildPrompt(
+    db: PrismaClient | Prisma.TransactionClient,
+    remaining: readonly PendingEntry[],
+  ): Promise<PendingPrompt | null> {
+    const first = remaining[0];
+    if (!first) return null;
+    return {
+      pendingId: first.id,
+      ledger: first.ledger,
+      entryType: first.entryType,
+      item: first.item,
+      amount: first.amount,
+      occurredOn: first.occurredOn,
+      remaining: remaining.length,
+      categories: await new CategoryRepository(db).listByGroup(first.ledger, first.entryType),
+    };
   }
 
   /** 以分類按鈕完成記帳（一次性 token；全程單一交易）。 */
@@ -271,6 +515,39 @@ export class TransactionService {
     await this.requireMatchingCategory(input.ledger, input.entryType, input.categoryId);
     try {
       return await this.transactions.createDetailed({ ...input, source: 'liff_form' });
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new DomainError('NOT_FOUND', CATEGORY_NOT_FOUND_MESSAGE);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * LIFF 批次記帳（source = liff_form）：先檢查全部分類，再於單一交易內依序寫入；任一筆失敗全部不寫入。
+   * 錯誤訊息以「第 N 筆：」開頭（N 為 1 起算的索引）。
+   * @throws DomainError NOT_FOUND、CATEGORY_MISMATCH
+   */
+  async createManyFromForm(inputs: readonly FormTransactionInput[]): Promise<TransactionDetail[]> {
+    for (const [index, input] of inputs.entries()) {
+      try {
+        await this.requireMatchingCategory(input.ledger, input.entryType, input.categoryId);
+      } catch (error) {
+        if (error instanceof DomainError) {
+          throw new DomainError(error.violationType, `第 ${index + 1} 筆：${error.message}`);
+        }
+        throw error;
+      }
+    }
+    try {
+      return await this.deps.prisma.$transaction(async (tx) => {
+        const repo = new TransactionRepository(tx);
+        const created: TransactionDetail[] = [];
+        for (const input of inputs) {
+          created.push(await repo.createDetailed({ ...input, source: 'liff_form' }));
+        }
+        return created;
+      });
     } catch (error) {
       if (isForeignKeyViolation(error)) {
         throw new DomainError('NOT_FOUND', CATEGORY_NOT_FOUND_MESSAGE);
