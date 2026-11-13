@@ -14,6 +14,7 @@ export const VIOLATION_TYPES = [
   'CATEGORY_MISMATCH',
   'DUPLICATE_NAME',
   'FALLBACK_CATEGORY_UNDELETABLE',
+  'OCCURRENCE_RESOLVED',
 ] as const;
 
 export const ledgerSchema = z.enum(LEDGERS);
@@ -104,3 +105,59 @@ export type TCategoryInput = {
   entryType: TEntryType;
   name: string;
 };
+
+/** 每月固定收支規則。 */
+export const recurringEntrySchema = z.object({
+  id: z.number().int(),
+  ledger: ledgerSchema,
+  entryType: entryTypeSchema,
+  item: z.string(),
+  amount: z.number().int(),
+  categoryId: z.number().int(),
+  categoryName: z.string(),
+  /** 每月幾號（1–31；當月沒有該日時為最後一天） */
+  dayOfMonth: z.number().int(),
+  note: z.string().nullable(),
+  active: z.boolean(),
+  /** 下一次到期日 YYYY-MM-DD */
+  nextDueOn: z.string(),
+});
+
+export type TRecurringEntry = z.infer<typeof recurringEntrySchema>;
+
+export const recurringEntryListSchema = z.object({
+  items: z.array(recurringEntrySchema),
+});
+
+/** POST / PUT /api/recurring 的 body（全欄位）。 */
+export type TRecurringEntryInput = {
+  ledger: TLedger;
+  entryType: TEntryType;
+  item: string;
+  amount: number;
+  categoryId: number;
+  dayOfMonth: number;
+  note: string | null;
+  active: boolean;
+};
+
+/** 待確認的一期固定收支。 */
+export const recurringOccurrenceSchema = z.object({
+  id: z.number().int(),
+  recurringEntryId: z.number().int(),
+  ledger: ledgerSchema,
+  entryType: entryTypeSchema,
+  item: z.string(),
+  amount: z.number().int(),
+  categoryId: z.number().int(),
+  categoryName: z.string(),
+  note: z.string().nullable(),
+  /** 到期日 YYYY-MM-DD */
+  dueOn: z.string(),
+});
+
+export type TRecurringOccurrence = z.infer<typeof recurringOccurrenceSchema>;
+
+export const recurringOccurrenceListSchema = z.object({
+  items: z.array(recurringOccurrenceSchema),
+});

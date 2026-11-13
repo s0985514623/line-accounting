@@ -23,6 +23,7 @@ import type { IdTokenVerifier } from './ports/id-token-verifier';
 import type { LineReplyGateway } from './ports/line-reply-gateway';
 import { CategoryService } from './services/category-service';
 import { OnboardingService } from './services/onboarding-service';
+import { RecurringService } from './services/recurring-service';
 import { ReportService } from './services/report-service';
 import { TransactionService } from './services/transaction-service';
 
@@ -50,6 +51,7 @@ interface AppServices {
   categories: CategoryService;
   transactions: TransactionService;
   reports: ReportService;
+  recurring: RecurringService;
 }
 
 function createServices(deps: AppDeps): AppServices {
@@ -59,6 +61,7 @@ function createServices(deps: AppDeps): AppServices {
     categories: new CategoryService(deps.prisma),
     transactions: new TransactionService({ prisma: deps.prisma, clock: deps.clock, onboarding }),
     reports: new ReportService(deps.prisma),
+    recurring: new RecurringService({ prisma: deps.prisma, clock: deps.clock }),
   };
 }
 
@@ -88,6 +91,7 @@ export function createApp(deps: AppDeps): Express {
       categories: services.categories,
       transactions: services.transactions,
       reports: services.reports,
+      recurring: services.recurring,
       clock: deps.clock,
     }),
   );
@@ -116,10 +120,11 @@ function createEventDispatcher(
       message: new TextMessageHandler({
         transactions: services.transactions,
         reports: services.reports,
+        recurring: services.recurring,
         clock: deps.clock,
         liffId: deps.config.liffId,
       }),
-      postback: new PostbackHandler(services.transactions, logger),
+      postback: new PostbackHandler(services.transactions, logger, services.recurring),
     },
     logger,
   });

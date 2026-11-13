@@ -12,6 +12,9 @@
  *  - delete（刪除按鈕）→ findSummaryById：存在 → 「確定刪除？…」confirm template；不存在 → 此紀錄已不存在。
  *  - delete_confirm（確定）→ deleteById：deleted → 已刪除：…；notFound → 此紀錄已不存在。
  *  - delete_cancel（取消）→ findSummaryById：存在 → 已取消刪除；不存在 → 此紀錄已不存在。絕不刪除。
+ *  - rconfirm（固定收支「確認入帳」）→ confirmOccurrence（source = line_text）：
+ *      confirmed → 已記帳摘要 + 刪除按鈕；alreadyResolved → 此期固定收支已處理過；notFound → 此固定收支已不存在。
+ *  - rskip（固定收支「略過」）→ skipOccurrence：skipped → 已略過：…；其餘同上。
  * 依據：specs/features/transaction/選擇分類完成記帳.feature、請求刪除記帳紀錄.feature、確認刪除記帳紀錄.feature；
  *       implementation-plan P3-6、P4、DF-2。
  */
@@ -22,6 +25,7 @@ import {
   type PostbackPayload,
 } from '../../domain/postback-codec';
 import type { LineMessage } from '../../ports/line-reply-gateway';
+import type { RecurringService } from '../../services/recurring-service';
 import type {
   CompleteBatchPickResult,
   CompletePickResult,
@@ -31,9 +35,12 @@ import { buildAutoRecordedText, buildPendingPrompt } from '../messages/batch-rep
 import { textMessage } from '../messages/builders';
 import { buildDeleteConfirmReply, buildDeletedReply } from '../messages/delete-replies';
 import { buildRecordedReply } from '../messages/entry-replies';
+import { buildSkippedReply } from '../messages/recurring-replies';
 import {
   BATCH_ALL_DONE_TEXT,
   DELETE_CANCELLED_TEXT,
+  OCCURRENCE_NOT_FOUND_TEXT,
+  OCCURRENCE_RESOLVED_TEXT,
   PICK_ALREADY_USED_TEXT,
   PICK_CATEGORY_MISMATCH_TEXT,
   PICK_CATEGORY_NOT_FOUND_TEXT,
@@ -65,6 +72,7 @@ export class PostbackHandler {
       'completePick' | 'completeBatchPick' | 'findSummaryById' | 'deleteById'
     >,
     private readonly logger: Logger,
+    private readonly recurring?: Pick<RecurringService, 'confirmOccurrence' | 'skipOccurrence'>,
   ) {}
 
   async handle(postback: IncomingPostback, replier: Replier): Promise<void> {
@@ -94,7 +102,37 @@ export class PostbackHandler {
         return [await this.confirmDelete(payload.id)];
       case 'delete_cancel':
         return [await this.cancelDelete(payload.id)];
+      case 'rconfirm':
+        return [await this.confirmOccurrence(payload.id)];
+      case 'rskip':
+        return [await this.skipOccurrence(payload.id)];
     }
+  }
+
+  private async confirmOccurrence(id: number): Promise<LineMessage> {
+    if (!this.recurring) return textMessage(POSTBACK_DATA_INVALID_TEXT);
+    const result = await this.recurring.confirmOccurrence(id, { source: 'line_text' });
+    if (result.kind === 'notFound') return textMessage(OCCURRENCE_NOT_FOUND_TEXT);
+    if (result.kind === 'alreadyResolved') return textMessage(OCCURRENCE_RESOLVED_TEXT);
+    this.logger.info({ occurrenceId: id }, 'recurring occurrence confirmed');
+    const { transaction } = result;
+    return buildRecordedReply({
+      ledger: transaction.ledger,
+      entryType: transaction.entryType,
+      item: transaction.item,
+      amount: transaction.amount,
+      categoryName: transaction.categoryName,
+      occurredOn: transaction.occurredOn,
+      transactionId: transaction.id,
+    });
+  }
+
+  private async skipOccurrence(id: number): Promise<LineMessage> {
+    if (!this.recurring) return textMessage(POSTBACK_DATA_INVALID_TEXT);
+    const result = await this.recurring.skipOccurrence(id);
+    if (result.kind === 'notFound') return textMessage(OCCURRENCE_NOT_FOUND_TEXT);
+    if (result.kind === 'alreadyResolved') return textMessage(OCCURRENCE_RESOLVED_TEXT);
+    return buildSkippedReply(result.occurrence);
   }
 
   private async completeBatchPick(pendingId: number, categoryId: number): Promise<LineMessage[]> {

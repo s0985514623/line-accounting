@@ -4,6 +4,10 @@
 import type { EntrySource, EntryType, Ledger } from '../domain/enums';
 import type { CategoryShare, MonthlyReport } from '../domain/monthly-report';
 import type { CategoryDetail } from '../repositories/category-repository';
+import type {
+  RecurringEntryDetail,
+  RecurringOccurrenceDetail,
+} from '../repositories/recurring-repository';
 import type { TransactionDetail } from '../repositories/transaction-repository';
 
 export interface CategoryDto {
@@ -90,5 +94,67 @@ export function toMonthlyReportDto(report: MonthlyReport): MonthlyReportDto {
     balance: report.balance,
     expenseByCategory: report.expenseByCategory.map(toShareDto),
     incomeByCategory: report.incomeByCategory.map(toShareDto),
+  };
+}
+
+export interface RecurringEntryDto {
+  id: number;
+  ledger: Ledger;
+  entryType: EntryType;
+  item: string;
+  amount: number;
+  categoryId: number;
+  categoryName: string;
+  dayOfMonth: number;
+  note: string | null;
+  active: boolean;
+  /** YYYY-MM-DD */
+  nextDueOn: string;
+}
+
+export function toRecurringEntryDto(entry: RecurringEntryDetail): RecurringEntryDto {
+  return {
+    id: entry.id,
+    ledger: entry.ledger,
+    entryType: entry.entryType,
+    item: entry.item,
+    amount: entry.amount,
+    categoryId: entry.categoryId,
+    categoryName: entry.categoryName,
+    dayOfMonth: entry.dayOfMonth,
+    note: entry.note,
+    active: entry.active,
+    nextDueOn: entry.nextDueOn,
+  };
+}
+
+export interface RecurringOccurrenceDto {
+  id: number;
+  recurringEntryId: number;
+  ledger: Ledger;
+  entryType: EntryType;
+  item: string;
+  amount: number;
+  categoryId: number;
+  categoryName: string;
+  note: string | null;
+  /** YYYY-MM-DD */
+  dueOn: string;
+}
+
+export function toRecurringOccurrenceDto(
+  occurrence: RecurringOccurrenceDetail,
+): RecurringOccurrenceDto {
+  return {
+    id: occurrence.id,
+    recurringEntryId: occurrence.recurringEntryId,
+    ledger: occurrence.ledger,
+    entryType: occurrence.entryType,
+    item: occurrence.item,
+    amount: occurrence.amount,
+    categoryId: occurrence.categoryId,
+    categoryName: occurrence.categoryName,
+    note: occurrence.note,
+    dueOn: occurrence.dueOn,
   };
 }

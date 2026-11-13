@@ -88,6 +88,8 @@ export const ALL_TABLES = [
   'transactions',
   'postback_tokens',
   'pending_entries',
+  'recurring_entries',
+  'recurring_occurrences',
 ];
 
 export async function truncateAll(prisma: PrismaClient): Promise<void> {

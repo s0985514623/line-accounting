@@ -112,3 +112,55 @@ Table pending_entries {
   選定後刪除本列並寫入 transactions。保留 7 天，逾期於下次批次記帳時清除。
   '''
 }
+
+Enum recurring_occurrence_status {
+  pending   [note: '待確認']
+  confirmed [note: '已入帳']
+  skipped   [note: '已略過']
+}
+
+Table recurring_entries {
+  id           integer     [pk, increment]
+  ledger       ledger      [not null]
+  entry_type   entry_type  [not null]
+  item         varchar(50) [not null]
+  amount       integer     [not null, note: 'CHECK amount > 0；預設金額，確認時可調整']
+  category_id  integer     [not null, ref: > categories.id]
+  day_of_month integer     [not null, note: 'CHECK 1–31；當月沒有該日 → 當月最後一天']
+  note         text        [null]
+  active       boolean     [not null, default: true]
+  next_due_on  date        [not null, note: '下一次到期日（Asia/Taipei）']
+  created_at   timestamp   [not null, default: `now()`]
+  updated_at   timestamp   [not null, default: `now()`]
+
+  indexes {
+    (active, next_due_on)
+  }
+
+  Note: '''
+  每月固定收支規則。排程（每 15 分鐘）將 next_due_on ≤ 今天的規則逐月產生 recurring_occurrences 並推進 next_due_on；
+  Asia/Taipei 9 點後以 LINE push 通知（確認入帳 / 修改金額 / 略過）。分類被刪除時改歸同帳本同收支「其他」。
+  '''
+}
+
+Table recurring_occurrences {
+  id                 integer                     [pk, increment]
+  recurring_entry_id integer                     [not null, ref: > recurring_entries.id, note: 'ON DELETE CASCADE']
+  due_on             date                        [not null]
+  amount             integer                     [not null, note: 'CHECK amount > 0；產生時的金額快照']
+  status             recurring_occurrence_status [not null, default: 'pending']
+  transaction_id     integer                     [null, ref: > transactions.id, note: 'ON DELETE SET NULL；confirmed 時寫入']
+  notified_at        timestamp                   [null, note: 'LINE push 成功時間；null = 尚未通知']
+  resolved_at        timestamp                   [null]
+  created_at         timestamp                   [not null, default: `now()`]
+
+  indexes {
+    (recurring_entry_id, due_on) [unique]
+    (status, due_on)
+  }
+
+  Note: '''
+  固定收支的某一期。只在 status = pending 時可確認（寫入 transactions，日期 = due_on）或略過；併發只會成功一次。
+  LINE 按鈕：action=rconfirm&id=、action=rskip&id=；LIFF：/recurring/occurrences/{id}。
+  '''
+}

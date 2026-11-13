@@ -10,6 +10,8 @@ import { createApp } from './app';
 import { EnvValidationError, loadEnv, toAppConfig } from './config/env';
 import { disconnectPrismaClient, getPrismaClient } from './db/prisma';
 import { createLogger } from './logging/logger';
+import { RecurringScheduler } from './scheduler/recurring-scheduler';
+import { RecurringService } from './services/recurring-service';
 
 /** 等待進行中請求的上限；逾時強制結束。 */
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -29,13 +31,16 @@ function main(): void {
   const logger = createLogger({ level: config.logLevel });
   const prisma = getPrismaClient(env.DATABASE_URL);
 
+  const clock = new SystemClock();
+  const lineGateway = new LineMessagingGateway(
+    new messagingApi.MessagingApiClient({ channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN }),
+    logger,
+  );
+
   const app = createApp({
     prisma,
-    clock: new SystemClock(),
-    lineGateway: new LineMessagingGateway(
-      new messagingApi.MessagingApiClient({ channelAccessToken: env.LINE_CHANNEL_ACCESS_TOKEN }),
-      logger,
-    ),
+    clock,
+    lineGateway,
     idTokenVerifier: new LineIdTokenVerifier({ channelId: config.lineLoginChannelId }),
     config,
     logger,
@@ -45,11 +50,22 @@ function main(): void {
     logger.info({ port: env.PORT, nodeEnv: env.NODE_ENV }, 'server listening');
   });
 
+  const recurringScheduler = new RecurringScheduler({
+    recurring: new RecurringService({ prisma, clock }),
+    gateway: lineGateway,
+    clock,
+    ownerUserId: config.ownerUserId,
+    liffId: config.liffId,
+    logger,
+  });
+  recurringScheduler.start();
+
   let shuttingDown = false;
   const shutdown = (signal: NodeJS.Signals): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     logger.info({ signal }, 'shutting down');
+    recurringScheduler.stop();
 
     const forceExit = setTimeout(() => {
       logger.error({ timeoutMs: SHUTDOWN_TIMEOUT_MS }, 'shutdown timed out; forcing exit');

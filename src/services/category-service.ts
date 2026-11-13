@@ -6,7 +6,7 @@
  *  - delete：單一 DB 交易內依序
  *      鎖定分類列 → 不存在 NOT_FOUND / 「其他」FALLBACK_CATEGORY_UNDELETABLE
  *      → 找同帳本同收支的「其他」（找不到 = 資料損壞，拋一般 Error → rollback、500）
- *      → 紀錄改歸「其他」→ 刪關鍵字 → 刪分類。
+ *      → 紀錄、固定收支改歸「其他」→ 刪關鍵字 → 刪分類。
  */
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { EntryType, Ledger } from '../domain/enums';
@@ -18,6 +18,7 @@ import {
   type NewCategory,
 } from '../repositories/category-repository';
 import { KeywordRepository } from '../repositories/keyword-repository';
+import { RecurringRepository } from '../repositories/recurring-repository';
 import { TransactionRepository } from '../repositories/transaction-repository';
 
 const NOT_FOUND_MESSAGE = '分類不存在';
@@ -73,6 +74,7 @@ export class CategoryService {
       }
 
       await new TransactionRepository(tx).reassignCategory(target.id, fallback.id);
+      await new RecurringRepository(tx).reassignCategory(target.id, fallback.id);
       await new KeywordRepository(tx).deleteByCategoryId(target.id);
       await categories.deleteById(target.id);
     });

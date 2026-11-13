@@ -20,6 +20,7 @@ export const ERROR_MESSAGES: Record<TApiErrorType, string> = {
   CATEGORY_MISMATCH: '所選分類與帳本或收支不符，請重新選擇分類',
   DUPLICATE_NAME: '名稱重複',
   FALLBACK_CATEGORY_UNDELETABLE: '「其他」分類無法刪除',
+  OCCURRENCE_RESOLVED: '此期已處理過（已入帳或已略過）',
   NETWORK_ERROR: '網路連線失敗，請檢查網路後再試',
   SERVER_ERROR: '伺服器發生錯誤，請稍後再試',
   INVALID_RESPONSE: '伺服器回應格式不正確',

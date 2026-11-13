@@ -43,8 +43,9 @@ model Category {
   isFallback Boolean   @default(false) @map("is_fallback")
   createdAt  DateTime  @default(now()) @map("created_at")
 
-  keywords     CategoryKeyword[]
-  transactions Transaction[]
+  keywords         CategoryKeyword[]
+  transactions     Transaction[]
+  recurringEntries RecurringEntry[]
 
   @@unique([ledger, entryType, name])
   @@map("categories")
@@ -81,8 +82,9 @@ model Transaction {
   createdAt  DateTime    @default(now()) @map("created_at")
   updatedAt  DateTime    @default(now()) @updatedAt @map("updated_at")
 
-  category       Category        @relation(fields: [categoryId], references: [id])
-  postbackTokens PostbackToken[]
+  category             Category              @relation(fields: [categoryId], references: [id])
+  postbackTokens       PostbackToken[]
+  recurringOccurrences RecurringOccurrence[]
 
   @@index([ledger, occurredOn])
   @@index([categoryId])
@@ -118,4 +120,58 @@ model PendingEntry {
   @@index([batchId, seq])
   @@index([createdAt])
   @@map("pending_entries")
+}
+
+enum RecurringOccurrenceStatus {
+  pending
+  confirmed
+  skipped
+
+  @@map("recurring_occurrence_status")
+}
+
+/// 每月固定收支規則。到期日由排程產生 RecurringOccurrence 並推播，使用者確認後才寫入 transactions。
+model RecurringEntry {
+  id         Int       @id @default(autoincrement())
+  ledger     Ledger
+  entryType  EntryType @map("entry_type")
+  item       String    @db.VarChar(50)
+  /// 預設金額（確認時可調整）；> 0
+  amount     Int
+  categoryId Int       @map("category_id")
+  /// 每月幾號（1–31）；當月沒有該日時改用當月最後一天
+  dayOfMonth Int       @map("day_of_month")
+  note       String?
+  active     Boolean   @default(true)
+  /// 下一次到期日（YYYY-MM-DD，Asia/Taipei）
+  nextDueOn  DateTime  @map("next_due_on") @db.Date
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  category    Category              @relation(fields: [categoryId], references: [id])
+  occurrences RecurringOccurrence[]
+
+  @@index([active, nextDueOn])
+  @@map("recurring_entries")
+}
+
+/// 固定收支某一期（待確認 / 已入帳 / 已略過）。
+model RecurringOccurrence {
+  id               Int                       @id @default(autoincrement())
+  recurringEntryId Int                       @map("recurring_entry_id")
+  dueOn            DateTime                  @map("due_on") @db.Date
+  /// 產生當下的金額快照（推播顯示的金額）
+  amount           Int
+  status           RecurringOccurrenceStatus @default(pending)
+  transactionId    Int?                      @map("transaction_id")
+  notifiedAt       DateTime?                 @map("notified_at")
+  resolvedAt       DateTime?                 @map("resolved_at")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+
+  recurringEntry RecurringEntry @relation(fields: [recurringEntryId], references: [id], onDelete: Cascade)
+  transaction    Transaction?   @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  @@unique([recurringEntryId, dueOn])
+  @@index([status, dueOn])
+  @@map("recurring_occurrences")
 }

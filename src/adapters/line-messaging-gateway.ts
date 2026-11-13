@@ -9,6 +9,7 @@ import { HTTPFetchError, type messagingApi } from '@line/bot-sdk';
 import type { Logger } from 'pino';
 import type {
   LineMessage,
+  LinePushGateway,
   LineReplyGateway,
   PostbackAction,
   QuickReplyItem,
@@ -20,6 +21,7 @@ import type {
 /** 結構相容 @line/bot-sdk 的 messagingApi.MessagingApiClient（測試可注入替身）。 */
 export interface ReplyMessageClient {
   replyMessage(request: { replyToken: string; messages: unknown[] }): Promise<unknown>;
+  pushMessage?(request: { to: string; messages: unknown[] }): Promise<unknown>;
 }
 
 function toSdkPostbackAction(action: PostbackAction): messagingApi.PostbackAction {
@@ -82,7 +84,7 @@ function describeReplyError(error: unknown): Record<string, unknown> {
   return { errorType: typeof error };
 }
 
-export class LineMessagingGateway implements LineReplyGateway {
+export class LineMessagingGateway implements LineReplyGateway, LinePushGateway {
   constructor(
     private readonly client: ReplyMessageClient,
     private readonly logger: Logger,
@@ -96,6 +98,23 @@ export class LineMessagingGateway implements LineReplyGateway {
         { ...describeReplyError(error), messageCount: messages.length },
         'LINE reply failed',
       );
+    }
+  }
+
+  async push(to: string, messages: LineMessage[]): Promise<boolean> {
+    if (!this.client.pushMessage) {
+      this.logger.error('LINE push not supported by client');
+      return false;
+    }
+    try {
+      await this.client.pushMessage({ to, messages: messages.map(toSdkMessage) });
+      return true;
+    } catch (error) {
+      this.logger.error(
+        { ...describeReplyError(error), messageCount: messages.length },
+        'LINE push failed',
+      );
+      return false;
     }
   }
 }

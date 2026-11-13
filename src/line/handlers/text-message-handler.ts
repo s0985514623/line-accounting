@@ -8,6 +8,7 @@
  *    - 記帳成功 → 已記帳摘要 + 刪除按鈕；未命中分類 → 分類 Quick Reply（data 過長時改回「備註太長…」）。
  *    - 月度摘要指令（本月 / 上月 / 公 本月 / 公 上月）→ [摘要文字, 圖表連結]（P5）。
  *    - 「待分類」→ 重新顯示最早一筆批次待分類項目的分類 Quick Reply。
+ *    - 「固定」→ 每月固定收支清單 + 待確認筆數 + 管理頁連結。
  *  - 多行（去掉空白行後 ≥ 2 行）→ 批次記帳：
  *    - 超過 MAX_BATCH_LINES 行 → 整批不記帳。
  *    - 每行獨立解析；錯誤行列出原因、其餘照記。
@@ -25,6 +26,7 @@ import {
 import { parseTextEntry, type ParseResult, type TextEntry } from '../../domain/text-entry-parser';
 import type { Clock } from '../../ports/clock';
 import type { LineMessage } from '../../ports/line-reply-gateway';
+import type { RecurringService } from '../../services/recurring-service';
 import type { ReportService } from '../../services/report-service';
 import type { BatchEntryInput, TransactionService } from '../../services/transaction-service';
 import {
@@ -34,6 +36,7 @@ import {
 } from '../messages/batch-replies';
 import { textMessage } from '../messages/builders';
 import { buildCategoryQuickReply, buildRecordedReply } from '../messages/entry-replies';
+import { buildRecurringListReplies } from '../messages/recurring-replies';
 import { buildSummaryReplies } from '../messages/summary-replies';
 import {
   AMOUNT_NOT_POSITIVE_INTEGER_TEXT,
@@ -59,7 +62,10 @@ export interface IncomingMessage {
 
 type SummaryCommand = Extract<ParseResult, { kind: 'summary' }>;
 
-type ParseErrorKind = Exclude<ParseResult['kind'], 'entry' | 'summary' | 'resumePending'>;
+type ParseErrorKind = Exclude<
+  ParseResult['kind'],
+  'entry' | 'summary' | 'resumePending' | 'listRecurring'
+>;
 
 const PARSE_ERROR_TEXTS: Readonly<Record<ParseErrorKind, string>> = {
   formatError: FORMAT_HELP_TEXT,
@@ -89,6 +95,8 @@ export interface TextMessageHandlerDeps {
     'createFromText' | 'createBatchFromText' | 'resumePending'
   >;
   reports: Pick<ReportService, 'getMonthlyReport'>;
+  /** 未提供時「固定」指令視為格式錯誤 */
+  recurring?: Pick<RecurringService, 'listEntries' | 'listPendingOccurrences'>;
   clock: Clock;
   /** LIFF app ID（圖表連結用） */
   liffId: string;
@@ -120,6 +128,9 @@ export class TextMessageHandler {
         await replier.reply([prompt ? buildPendingPrompt(prompt) : textMessage(NO_PENDING_TEXT)]);
         return;
       }
+      case 'listRecurring':
+        await replier.reply(await this.buildRecurringList());
+        return;
       case 'entry': {
         const resolved = this.resolveDate(parsed);
         await replier.reply([
@@ -146,7 +157,11 @@ export class TextMessageHandler {
     let carried: { ok: true; date: EntryDateSpec } | { ok: false; line: number } | null = null;
     for (const { text, line } of numbered) {
       const parsed = parseTextEntry(text);
-      if (parsed.kind === 'summary' || parsed.kind === 'resumePending') {
+      if (
+        parsed.kind === 'summary' ||
+        parsed.kind === 'resumePending' ||
+        parsed.kind === 'listRecurring'
+      ) {
         errors.push({ line, message: BATCH_LINE_COMMAND_TEXT });
         continue;
       }
@@ -186,6 +201,16 @@ export class TextMessageHandler {
     }
     if (result.next) replies.push(buildPendingPrompt(result.next));
     return replies;
+  }
+
+  private async buildRecurringList(): Promise<LineMessage[]> {
+    const { recurring } = this.deps;
+    if (!recurring) return [textMessage(FORMAT_HELP_TEXT)];
+    const [entries, pending] = await Promise.all([
+      recurring.listEntries(),
+      recurring.listPendingOccurrences(),
+    ]);
+    return buildRecurringListReplies(entries, pending.length, this.deps.liffId);
   }
 
   private resolveDate(entry: TextEntry): ResolvedEntry {

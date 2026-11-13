@@ -43,6 +43,17 @@ export interface TemplateMessage {
 
 export type LineMessage = TextMessage | TemplateMessage;
 
+/** 一次 push 最多訊息數（LINE Messaging API）。 */
+export const MAX_PUSH_MESSAGES = 5;
+
+export interface LinePushGateway {
+  /**
+   * 主動推播訊息給指定使用者（最多 MAX_PUSH_MESSAGES 則）。
+   * @returns 是否成功送出（失敗只記錄，不拋出）
+   */
+  push(to: string, messages: LineMessage[]): Promise<boolean>;
+}
+
 export interface LineReplyGateway {
   /** 以 reply token 回覆訊息（token 一次性，失敗不重試）。 */
   reply(replyToken: string, messages: LineMessage[]): Promise<void>;

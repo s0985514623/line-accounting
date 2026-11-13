@@ -63,6 +63,15 @@ export const BATCH_LINE_FORMAT_ERROR_TEXT = '格式錯誤';
 /** 批次中出現單行指令（本月 / 上月 / 待分類）。 */
 export const BATCH_LINE_COMMAND_TEXT = '指令請單獨傳送';
 
+/** 固定收支某一期已確認或略過過。 */
+export const OCCURRENCE_RESOLVED_TEXT = '此期固定收支已處理過';
+
+/** 固定收支某一期不存在（規則已刪除）。 */
+export const OCCURRENCE_NOT_FOUND_TEXT = '此固定收支已不存在';
+
+/** 「固定」但沒有任何固定收支。 */
+export const NO_RECURRING_TEXT = '目前沒有設定每月固定收支';
+
 /** 「待分類」但沒有待分類項目。 */
 export const NO_PENDING_TEXT = '目前沒有待分類的項目';
 
