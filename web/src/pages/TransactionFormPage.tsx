@@ -9,7 +9,7 @@ import { EntryTypeToggle } from '../components/EntryTypeToggle';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LedgerToggle } from '../components/LedgerToggle';
 import { taipeiToday } from '../lib/date';
-import { readEditRouteState } from '../lib/edit-route-state';
+import { readEditRouteState, readReturnTo } from '../lib/edit-route-state';
 import {
   createEmptyFormValues,
   toFormValues,
@@ -39,13 +39,15 @@ function FieldError({ id, message }: TFieldErrorProps) {
 type TTransactionFormProps = {
   /** 編輯中的紀錄；新增模式為 undefined */
   editing?: TTransaction;
+  /** 儲存成功後導向的路徑 */
+  returnTo: string;
 };
 
 /**
  * 記帳表單本體（新增／編輯共用）。
  * 切換帳本或收支時重新載入分類並清空已選分類；送出中 disabled 並以 ref 防止重複送出。
  */
-function TransactionForm({ editing }: TTransactionFormProps) {
+function TransactionForm({ editing, returnTo }: TTransactionFormProps) {
   const navigate = useNavigate();
   const idPrefix = useId();
   const fieldId = (field: TTransactionFormField) => `${idPrefix}-${field}`;
@@ -83,7 +85,7 @@ function TransactionForm({ editing }: TTransactionFormProps) {
 
     isSubmittingRef.current = true;
     saveMutation.mutate(toTransactionInput(values), {
-      onSuccess: () => navigate('/'),
+      onSuccess: () => navigate(returnTo),
       onSettled: () => {
         isSubmittingRef.current = false;
       },
@@ -203,18 +205,19 @@ export function TransactionFormPage() {
   const location = useLocation();
   const isEdit = id !== undefined;
   const editing = isEdit ? readEditRouteState(location.state, id) : undefined;
+  const returnTo = readReturnTo(location.state);
 
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <BackLink />
+        <BackLink to={returnTo} />
         <h1 className={styles.title}>{isEdit ? '編輯記帳' : '新增記帳'}</h1>
       </header>
 
       {isEdit && !editing ? (
         <ErrorBanner message="找不到要編輯的紀錄，請從列表重新選擇。" />
       ) : (
-        <TransactionForm key={id ?? 'new'} editing={editing ?? undefined} />
+        <TransactionForm key={id ?? 'new'} editing={editing ?? undefined} returnTo={returnTo} />
       )}
     </main>
   );

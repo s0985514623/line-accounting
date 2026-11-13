@@ -46,7 +46,10 @@ describe('App 路由', () => {
     it('/liff/chart 顯示統計圖表頁（無參數＝本月個人）', async () => {
       visit('/liff/chart');
 
-      expect(await screen.findByRole('heading', { name: '統計圖表' })).toBeInTheDocument();
+      // 圖表頁為 lazy chunk（含 Recharts）；整套平行執行時載入可能超過 findBy 預設的 1 秒
+      expect(
+        await screen.findByRole('heading', { name: '統計圖表' }, { timeout: 5000 }),
+      ).toBeInTheDocument();
       await screen.findByRole('region', { name: '月度合計' });
       expect(requestsTo('GET', '/api/reports/monthly')[0]?.query).toEqual({
         month: '2026-11',
