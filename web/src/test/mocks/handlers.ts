@@ -418,13 +418,18 @@ export const handlers = [
     const incomeTotal = sum('income');
     const expenseTotal = sum('expense');
     const sharesOf = (type: EntryType, total: number) => {
-      const byCategory = new Map<string, number>();
+      const byCategory = new Map<number, { categoryName: string; amount: number }>();
       for (const t of inMonth.filter((x) => x.entryType === type)) {
-        byCategory.set(t.categoryName, (byCategory.get(t.categoryName) ?? 0) + t.amount);
+        const current = byCategory.get(t.categoryId);
+        byCategory.set(t.categoryId, {
+          categoryName: t.categoryName,
+          amount: (current?.amount ?? 0) + t.amount,
+        });
       }
       return [...byCategory.entries()]
-        .sort((a, b) => b[1] - a[1])
-        .map(([categoryName, amount]) => ({
+        .sort((a, b) => b[1].amount - a[1].amount || a[0] - b[0])
+        .map(([categoryId, { categoryName, amount }]) => ({
+          categoryId,
           categoryName,
           amount,
           ratio: Math.round((amount / total) * 1000) / 10,

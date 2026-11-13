@@ -54,6 +54,7 @@ export function toTransactionDto(transaction: TransactionDetail): TransactionDto
 }
 
 export interface ExpenseCategoryShareDto {
+  categoryId: number;
   categoryName: string;
   amount: number;
   /** 百分比，四捨五入至小數一位 */
@@ -72,7 +73,12 @@ export interface MonthlyReportDto {
 }
 
 function toShareDto(share: CategoryShare): ExpenseCategoryShareDto {
-  return { categoryName: share.categoryName, amount: share.amount, ratio: share.ratio };
+  return {
+    categoryId: share.categoryId,
+    categoryName: share.categoryName,
+    amount: share.amount,
+    ratio: share.ratio,
+  };
 }
 
 export function toMonthlyReportDto(report: MonthlyReport): MonthlyReportDto {

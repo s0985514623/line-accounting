@@ -124,3 +124,39 @@
   text-align: center;
   color: var(--color-text-muted);
 }
+
+.tables {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.categoryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.chevron {
+  width: 1em;
+  color: var(--color-text-muted);
+}
+
+.openRow td {
+  background: var(--color-surface-overlay);
+}
+
+.table .detailRow td {
+  padding: 0 var(--space-2) var(--space-2);
+  border-top: 0;
+  background: var(--color-surface-overlay);
+}

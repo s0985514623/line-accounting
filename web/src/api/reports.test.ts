@@ -61,8 +61,8 @@ describe('api/reports / fetchMonthlyReport', () => {
         incomeTotal: 50000,
         expenseTotal: 320,
         balance: 49680,
-        expenseByCategory: [{ categoryName: '餐飲', amount: 320, ratio: 100 }],
-        incomeByCategory: [{ categoryName: '薪資', amount: 50000, ratio: 100 }],
+        expenseByCategory: [{ categoryId: 1, categoryName: '餐飲', amount: 320, ratio: 100 }],
+        incomeByCategory: [{ categoryId: 3, categoryName: '薪資', amount: 50000, ratio: 100 }],
       });
       const [req] = requestsTo('GET', '/api/reports/monthly');
       expect(req?.query).toEqual({ month: '2026-11', ledger: 'personal' });
@@ -79,7 +79,9 @@ describe('api/reports / fetchMonthlyReport', () => {
       expect(report.incomeTotal).toBe(0);
       expect(report.expenseTotal).toBe(300);
       expect(report.balance).toBe(-300);
-      expect(report.expenseByCategory).toEqual([{ categoryName: '文具', amount: 300, ratio: 100 }]);
+      expect(report.expenseByCategory).toEqual([
+        { categoryId: 5, categoryName: '文具', amount: 300, ratio: 100 },
+      ]);
     });
 
     it('未提供參數時不帶 query string（由伺服器預設本月個人）', async () => {
@@ -112,8 +114,8 @@ describe('api/reports / fetchMonthlyReport', () => {
       const report = await fetchMonthlyReport({ month: '2026-11', ledger: 'personal' });
 
       expect(report.expenseByCategory).toEqual([
-        { categoryName: '餐飲', amount: 320, ratio: 80 },
-        { categoryName: '交通', amount: 80, ratio: 20 },
+        { categoryId: 1, categoryName: '餐飲', amount: 320, ratio: 80 },
+        { categoryId: 2, categoryName: '交通', amount: 80, ratio: 20 },
       ]);
     });
   });

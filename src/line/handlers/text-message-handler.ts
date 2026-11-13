@@ -10,11 +10,18 @@
  *    - 「待分類」→ 重新顯示最早一筆批次待分類項目的分類 Quick Reply。
  *  - 多行（去掉空白行後 ≥ 2 行）→ 批次記帳：
  *    - 超過 MAX_BATCH_LINES 行 → 整批不記帳。
- *    - 每行獨立解析；錯誤行列出原因、其餘照記。命中分類者直接記帳，未命中者依行序逐筆以 Quick Reply 詢問。
+ *    - 每行獨立解析；錯誤行列出原因、其餘照記。
+ *    - 沒寫日期的行沿用上方最近一個有寫日期的行（之前都沒有 → 今天）；該日期有誤時，沿用的行也不記帳。
+ *    - 命中分類者直接記帳，未命中者依行序逐筆以 Quick Reply 詢問。
  * 依據：specs/features/transaction/以文字訊息記帳.feature、批次文字記帳.feature、
  *       specs/features/report/查詢月度文字摘要.feature；implementation-plan P3-6、P5、DF-1。
  */
-import { resolveEntryDate, resolveSummaryMonth, todayInTaipei } from '../../domain/date-utils';
+import {
+  resolveEntryDate,
+  resolveSummaryMonth,
+  todayInTaipei,
+  type EntryDateSpec,
+} from '../../domain/date-utils';
 import { parseTextEntry, type ParseResult, type TextEntry } from '../../domain/text-entry-parser';
 import type { Clock } from '../../ports/clock';
 import type { LineMessage } from '../../ports/line-reply-gateway';
@@ -39,6 +46,7 @@ import {
   FORMAT_HELP_TEXT,
   ITEM_TOO_LONG_TEXT,
   MAX_BATCH_LINES,
+  batchInheritedDateErrorText,
   NO_PENDING_TEXT,
 } from '../messages/texts';
 import type { Replier } from '../reply-context';
@@ -134,18 +142,30 @@ export class TextMessageHandler {
 
     const entries: BatchEntryInput[] = [];
     const errors: BatchLineError[] = [];
+    // 沒寫日期的行沿用上方最近一個「有寫日期」的行；該日期有誤時，沿用它的行也不記帳
+    let carried: { ok: true; date: EntryDateSpec } | { ok: false; line: number } | null = null;
     for (const { text, line } of numbered) {
       const parsed = parseTextEntry(text);
       if (parsed.kind === 'summary' || parsed.kind === 'resumePending') {
         errors.push({ line, message: BATCH_LINE_COMMAND_TEXT });
         continue;
       }
+      if (parsed.kind === 'dateError') carried = { ok: false, line };
       if (parsed.kind !== 'entry') {
         errors.push({ line, message: BATCH_PARSE_ERROR_TEXTS[parsed.kind] });
         continue;
       }
-      const resolved = this.resolveDate(parsed);
+      if (parsed.date !== null) {
+        carried = { ok: true, date: parsed.date };
+      } else if (carried?.ok === false) {
+        errors.push({ line, message: batchInheritedDateErrorText(carried.line) });
+        continue;
+      }
+      const resolved = this.resolveDate(
+        parsed.date === null && carried?.ok ? { ...parsed, date: carried.date } : parsed,
+      );
       if (!resolved.ok) {
+        if (parsed.date !== null) carried = { ok: false, line };
         errors.push({ line, message: resolved.message });
         continue;
       }
