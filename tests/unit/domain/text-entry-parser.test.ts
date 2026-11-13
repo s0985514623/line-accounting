@@ -34,6 +34,7 @@ type Entry = {
   item: string;
   amount: number;
   note: string | null;
+  date: null;
 };
 
 const entry = (
@@ -42,7 +43,7 @@ const entry = (
   item: string,
   amount: number,
   note: string | null = null,
-): Entry => ({ kind: 'entry', ledger, entryType, item, amount, note });
+): Entry => ({ kind: 'entry', ledger, entryType, item, amount, note, date: null });
 
 describe('[Smoke] 規格範例（以文字訊息記帳.feature）', () => {
   it.each([

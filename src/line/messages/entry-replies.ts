@@ -85,7 +85,7 @@ export interface CategoryPromptInput {
  * 依 LINE 上限挑選按鈕（ASM-06）：未超過全部保留（維持輸入順序）；
  * 超過時取前 12 個一般分類 +「其他」放最後（沒有「其他」則取前 13 個）。
  */
-function selectCategories(categories: readonly CategoryChoice[]): readonly CategoryChoice[] {
+export function selectCategories(categories: readonly CategoryChoice[]): readonly CategoryChoice[] {
   if (categories.length <= MAX_QUICK_REPLY_ITEMS) return categories;
   const fallback = categories.find((category) => category.isFallback);
   if (!fallback) return categories.slice(0, MAX_QUICK_REPLY_ITEMS);

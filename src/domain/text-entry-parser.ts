@@ -5,15 +5,18 @@
  *  1. 先 NFKC 正規化（ASM-01：全形數字 / ＋ / 全形空白轉半形）→ trim → 以 /\s+/ 切詞。
  *  2. 切詞後以單一空白 join 完全等於「本月 / 上月 / 公 本月 / 公 上月」→ summary（優先於記帳）。
  *  3. 首詞為「公」且後面還有詞 → 公司帳本，剝除一次（「公」單獨 → formatError；「公文具」不是前綴）。
+ *     日期前綴（今天 / 昨天 / 前天 / M/D / YYYY/M/D / YYYY-M-D）可放在「公」之前或之後，
+ *     且只有在後面還剩「項目、金額」兩詞以上時才視為日期（「11/10 120」仍是項目 11/10）。
+ *     月 / 日超出範圍 → dateError；日曆合法性與「不可晚於今天」由 resolveEntryDate 判斷。
  *  4. 下一詞以「+」開頭 → 收入，去掉「+」；去掉後為空 → formatError。
  *  5. 至少「項目、金額」兩詞；金額詞不是數字 → formatError；是數字但非正整數 → amountError；
  *     超過 MAX_AMOUNT → amountTooLarge（ASM-03）。項目（NFKC 後）超過 MAX_ITEM_LENGTH → itemTooLong（ASM-04）。
  *  6. 金額後其餘詞以單一空白 join 為備註；無備註 → null。
  */
-import type { SummaryPeriod } from './date-utils';
+import type { EntryDateSpec, SummaryPeriod } from './date-utils';
 import type { EntryType, Ledger } from './enums';
 
-export type { SummaryPeriod } from './date-utils';
+export type { EntryDateSpec, SummaryPeriod } from './date-utils';
 
 /** 金額上限（ASM-03）。 */
 export const MAX_AMOUNT = 99_999_999;
@@ -28,9 +31,14 @@ export type ParseResult =
       item: string;
       amount: number;
       note: string | null;
+      /** 日期前綴；null = 今天 */
+      date: EntryDateSpec | null;
     }
   | { kind: 'summary'; ledger: Ledger; period: SummaryPeriod }
+  /** 「待分類」：重新顯示最早一筆待分類的批次項目 */
+  | { kind: 'resumePending' }
   | { kind: 'formatError' }
+  | { kind: 'dateError' }
   | { kind: 'amountError' }
   | { kind: 'amountTooLarge' }
   | { kind: 'itemTooLong' };
@@ -53,6 +61,37 @@ const DIGITS_PATTERN = /^\d+$/;
 const NUMERIC_PATTERN = /^[+-]?\d+(\.\d+)?$/;
 
 const FORMAT_ERROR = { kind: 'formatError' } as const;
+
+const RESUME_PENDING_COMMAND = '待分類';
+
+const RELATIVE_DATE_WORDS: ReadonlyMap<string, number> = new Map([
+  ['今天', 0],
+  ['昨天', 1],
+  ['前天', 2],
+]);
+
+const FULL_DATE_PATTERN = /^(\d{4})[/-](\d{1,2})[/-](\d{1,2})$/;
+const MONTH_DAY_PATTERN = /^(\d{1,2})\/(\d{1,2})$/;
+
+type DateWordResult = { ok: true; spec: EntryDateSpec } | { ok: false; error: ParseResult } | null;
+
+/** 判斷一個詞是否為日期前綴；不是日期 → null；像日期但月 / 日超出範圍 → dateError。 */
+function parseDateWord(word: string): DateWordResult {
+  const daysAgo = RELATIVE_DATE_WORDS.get(word);
+  if (daysAgo !== undefined) return { ok: true, spec: { kind: 'relative', daysAgo } };
+
+  const full = FULL_DATE_PATTERN.exec(word);
+  const monthDay = full ? null : MONTH_DAY_PATTERN.exec(word);
+  if (!full && !monthDay) return null;
+
+  const year = full ? Number(full[1]) : null;
+  const month = Number(full ? full[2] : monthDay?.[1]);
+  const day = Number(full ? full[3] : monthDay?.[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return { ok: false, error: { kind: 'dateError' } };
+  }
+  return { ok: true, spec: { kind: 'calendar', year, month, day } };
+}
 
 type AmountResult = { ok: true; amount: number } | { ok: false; error: ParseResult };
 
@@ -88,14 +127,31 @@ export function parseTextEntry(input: string): ParseResult {
     .split(/\s+/)
     .filter((word) => word.length > 0);
 
-  const summary = SUMMARY_COMMANDS.get(words.join(' '));
+  const joined = words.join(' ');
+  const summary = SUMMARY_COMMANDS.get(joined);
   if (summary) return { kind: 'summary', ...summary };
+  if (joined === RESUME_PENDING_COMMAND) return { kind: 'resumePending' };
 
   let ledger: Ledger = 'personal';
+  let date: EntryDateSpec | null = null;
   let rest = words;
-  if (rest[0] === COMPANY_PREFIX && rest.length > 1) {
-    ledger = 'company';
-    rest = rest.slice(1);
+  // 「公」與日期前綴順序不拘，各最多剝除一次
+  for (let round = 0; round < 2; round += 1) {
+    if (ledger === 'personal' && rest[0] === COMPANY_PREFIX && rest.length > 1) {
+      ledger = 'company';
+      rest = rest.slice(1);
+      continue;
+    }
+    if (date === null && rest.length >= 3 && rest[0] !== undefined) {
+      const parsedDate = parseDateWord(rest[0]);
+      if (parsedDate && !parsedDate.ok) return parsedDate.error;
+      if (parsedDate) {
+        date = parsedDate.spec;
+        rest = rest.slice(1);
+        continue;
+      }
+    }
+    break;
   }
 
   const [firstWord, amountWord, ...noteWords] = rest;
@@ -121,5 +177,6 @@ export function parseTextEntry(input: string): ParseResult {
     item,
     amount: amount.amount,
     note: noteWords.length > 0 ? noteWords.join(' ') : null,
+    date,
   };
 }
