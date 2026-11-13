@@ -3,6 +3,7 @@ import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { ApiError } from './api/http';
 import { LoadingStatus } from './components/LoadingStatus';
+import { BatchFormPage } from './pages/BatchFormPage';
 import { CategoryPage } from './pages/CategoryPage';
 import { TransactionFormPage } from './pages/TransactionFormPage';
 import { TransactionListPage } from './pages/TransactionListPage';
@@ -42,6 +43,7 @@ export function App() {
           <Route path="/" element={<TransactionListPage />} />
           <Route path="/new" element={<TransactionFormPage />} />
           <Route path="/edit/:id" element={<TransactionFormPage />} />
+          <Route path="/batch" element={<BatchFormPage />} />
           <Route path="/categories" element={<CategoryPage />} />
           <Route
             path="/chart"

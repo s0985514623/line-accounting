@@ -524,6 +524,39 @@ export class TransactionService {
   }
 
   /**
+   * LIFF 批次記帳（source = liff_form）：先檢查全部分類，再於單一交易內依序寫入；任一筆失敗全部不寫入。
+   * 錯誤訊息以「第 N 筆：」開頭（N 為 1 起算的索引）。
+   * @throws DomainError NOT_FOUND、CATEGORY_MISMATCH
+   */
+  async createManyFromForm(inputs: readonly FormTransactionInput[]): Promise<TransactionDetail[]> {
+    for (const [index, input] of inputs.entries()) {
+      try {
+        await this.requireMatchingCategory(input.ledger, input.entryType, input.categoryId);
+      } catch (error) {
+        if (error instanceof DomainError) {
+          throw new DomainError(error.violationType, `第 ${index + 1} 筆：${error.message}`);
+        }
+        throw error;
+      }
+    }
+    try {
+      return await this.deps.prisma.$transaction(async (tx) => {
+        const repo = new TransactionRepository(tx);
+        const created: TransactionDetail[] = [];
+        for (const input of inputs) {
+          created.push(await repo.createDetailed({ ...input, source: 'liff_form' }));
+        }
+        return created;
+      });
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new DomainError('NOT_FOUND', CATEGORY_NOT_FOUND_MESSAGE);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * LIFF 編輯：全欄位更新，source 不變；任何檢查失敗皆不寫入。
    * @throws DomainError NOT_FOUND（紀錄或分類不存在）、CATEGORY_MISMATCH
    */

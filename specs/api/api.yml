@@ -113,6 +113,46 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
+  /api/transactions/batch:
+    post:
+      tags: [transactions]
+      operationId: createTransactionsBatch
+      summary: 以表單批次記帳（全部成功或全部不寫入）
+      security: [{ liffIdToken: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items: { $ref: '#/components/schemas/TransactionInput' }
+      responses:
+        '201':
+          description: 建立成功（source = liff_form），順序同 request
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Transaction' }
+        '400':
+          description: INVALID_ARGUMENT 或 CATEGORY_MISMATCH（message 以「第 N 筆：」開頭）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthenticated' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
   /api/transactions/{id}:
     parameters:
       - name: id

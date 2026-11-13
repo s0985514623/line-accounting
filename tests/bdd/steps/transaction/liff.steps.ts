@@ -65,3 +65,12 @@ When('記帳者以 LIFF 查詢記帳紀錄列表：', async function (this: Test
     .set(this.liffAuthHeaders())
     .query(rowToLiffQuery(singleRow(table)));
 });
+
+// W3b（command）：POST /api/transactions/batch（每列一筆）
+When('記帳者以 LIFF 批次新增記帳紀錄：', async function (this: TestWorld, table: DataTable) {
+  const http = await this.http();
+  this.lastResponse = await http
+    .post('/api/transactions/batch')
+    .set(this.liffAuthHeaders())
+    .send({ items: table.hashes().map((row) => rowToLiffBody(row)) });
+});

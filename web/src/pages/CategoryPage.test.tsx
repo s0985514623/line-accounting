@@ -327,7 +327,9 @@ describe('CategoryPage', () => {
       await user.type(screen.getByRole('textbox', { name: '分類名稱' }), '寵物');
       await user.dblClick(screen.getByRole('button', { name: '新增分類' }));
 
-      await waitFor(() => expect(screen.getByRole('textbox', { name: '分類名稱' })).toHaveValue(''));
+      await waitFor(() =>
+        expect(screen.getByRole('textbox', { name: '分類名稱' })).toHaveValue(''),
+      );
       expect(requestsTo('POST', '/api/categories')).toHaveLength(1);
     });
   });
@@ -446,7 +448,9 @@ describe('CategoryPage', () => {
 
     it('422 FALLBACK_CATEGORY_UNDELETABLE（防禦）→ 顯示「「其他」分類無法刪除」', async () => {
       server.use(
-        http.delete('*/api/categories/:id', () => errorResponse(422, 'FALLBACK_CATEGORY_UNDELETABLE')),
+        http.delete('*/api/categories/:id', () =>
+          errorResponse(422, 'FALLBACK_CATEGORY_UNDELETABLE'),
+        ),
       );
       const { user } = renderCategories();
       await loaded();

@@ -26,6 +26,17 @@ export function createTransaction(input: TTransactionInput): Promise<TTransactio
   return request('/api/transactions', { method: 'POST', body: input, schema: transactionSchema });
 }
 
+export async function createTransactionsBatch(
+  inputs: TTransactionInput[],
+): Promise<TTransaction[]> {
+  const { items } = await request('/api/transactions/batch', {
+    method: 'POST',
+    body: { items: inputs },
+    schema: transactionListSchema,
+  });
+  return items;
+}
+
 export function updateTransaction(id: number, input: TTransactionInput): Promise<TTransaction> {
   return request(`/api/transactions/${id}`, {
     method: 'PUT',
@@ -68,6 +79,15 @@ export function useSaveTransaction(id: number | undefined) {
   return useMutation({
     mutationFn: (input: TTransactionInput) =>
       id === undefined ? createTransaction(input) : updateTransaction(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY }),
+  });
+}
+
+/** 批次新增記帳紀錄（全部成功或全部不寫入）；成功後讓列表查詢失效。 */
+export function useCreateTransactionsBatch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createTransactionsBatch,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY }),
   });
 }
