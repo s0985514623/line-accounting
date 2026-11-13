@@ -16,7 +16,7 @@
  */
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { requestsTo } from './test/mocks/handlers';
 
@@ -35,6 +35,12 @@ afterEach(() => {
 });
 
 describe('App 路由', () => {
+  // 圖表 / 年報頁為 lazy chunk（含 Recharts）；vite 轉譯快取冷時首次載入可能超過數秒。
+  // 先在 hook（較長逾時）內載入一次，讓各測試的 lazy() 立即完成，避免 findBy 逾時造成的偶發失敗。
+  beforeAll(async () => {
+    await Promise.all([import('./pages/ChartPage'), import('./pages/AnnualReportPage')]);
+  }, 60_000);
+
   describe('Smoke', () => {
     it('/liff/categories 顯示分類管理頁', async () => {
       visit('/liff/categories');
@@ -46,10 +52,7 @@ describe('App 路由', () => {
     it('/liff/chart 顯示統計圖表頁（無參數＝本月個人）', async () => {
       visit('/liff/chart');
 
-      // 圖表頁為 lazy chunk（含 Recharts）；整套平行執行時載入可能超過 findBy 預設的 1 秒
-      expect(
-        await screen.findByRole('heading', { name: '統計圖表' }, { timeout: 5000 }),
-      ).toBeInTheDocument();
+      expect(await screen.findByRole('heading', { name: '統計圖表' })).toBeInTheDocument();
       await screen.findByRole('region', { name: '月度合計' });
       expect(requestsTo('GET', '/api/reports/monthly')[0]?.query).toEqual({
         month: '2026-11',

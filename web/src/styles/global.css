@@ -63,3 +63,23 @@ textarea {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
+
+/*
+ * 原生日期 / 月份輸入：iOS（LINE 內建瀏覽器）會保留固有寬度、無視 width:100% 而撐破版面，
+ * 且值會置中、高度塌陷。去除原生外觀並限制在容器寬度內。
+ */
+input[type='date'],
+input[type='month'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value {
+  min-height: 1.5em;
+  text-align: left;
+}
