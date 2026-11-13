@@ -19,8 +19,9 @@ describe('buildAnnualReport', () => {
         { entryType: 'income', categoryId: 3, categoryName: '薪資', amount: 1000 },
       ],
       monthRows: [
-        { month: '2026-01', entryType: 'expense', amount: 400 },
-        { month: '2026-12', entryType: 'income', amount: 1000 },
+        { month: '2026-01', entryType: 'expense', categoryId: 1, amount: 300 },
+        { month: '2026-01', entryType: 'expense', categoryId: 2, amount: 100 },
+        { month: '2026-12', entryType: 'income', categoryId: 3, amount: 1000 },
       ],
     });
 
@@ -49,5 +50,10 @@ describe('buildAnnualReport', () => {
       balance: 0,
     });
     expect(report.months[11]?.balance).toBe(1000);
+    expect(report.expenseByCategory[0]?.monthlyAmounts).toEqual([
+      300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ]);
+    expect(report.expenseByCategory[1]?.monthlyAmounts[0]).toBe(100);
+    expect(report.incomeByCategory[0]?.monthlyAmounts[11]).toBe(1000);
   });
 });

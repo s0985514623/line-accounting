@@ -173,6 +173,13 @@ export const monthTotalsSchema = z.object({
 
 export type TMonthTotals = z.infer<typeof monthTotalsSchema>;
 
+/** 年度分類佔比：另附該分類 1–12 月金額（index 0 = 1 月）。 */
+export const annualCategoryShareSchema = expenseByCategorySchema.extend({
+  monthlyAmounts: z.array(z.number().int()).length(12),
+});
+
+export type TAnnualCategoryShare = z.infer<typeof annualCategoryShareSchema>;
+
 /** 年度報表：全年合計、分類佔比與 1–12 月收支。 */
 export const annualReportSchema = z.object({
   ledger: ledgerSchema,
@@ -180,8 +187,8 @@ export const annualReportSchema = z.object({
   incomeTotal: z.number().int(),
   expenseTotal: z.number().int(),
   balance: z.number().int(),
-  expenseByCategory: z.array(expenseByCategorySchema),
-  incomeByCategory: z.array(expenseByCategorySchema),
+  expenseByCategory: z.array(annualCategoryShareSchema),
+  incomeByCategory: z.array(annualCategoryShareSchema),
   months: z.array(monthTotalsSchema),
 });
 

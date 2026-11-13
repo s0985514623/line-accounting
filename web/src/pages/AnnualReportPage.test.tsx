@@ -8,6 +8,11 @@ import { server } from '../test/mocks/server';
 import { renderRoutes } from '../test/render';
 import { AnnualReportPage } from './AnnualReportPage';
 
+/** 1–12 月金額，未指定的月份為 0。 */
+function monthly(amounts: Record<number, number>): number[] {
+  return Array.from({ length: 12 }, (_, index) => amounts[index + 1] ?? 0);
+}
+
 function months(overrides: Record<string, { incomeTotal: number; expenseTotal: number }>) {
   return Array.from({ length: 12 }, (_, index) => {
     const month = `2026-${String(index + 1).padStart(2, '0')}`;
@@ -23,10 +28,30 @@ const REPORT = {
   expenseTotal: 123456,
   balance: 476544,
   expenseByCategory: [
-    { categoryId: 1, categoryName: '居住', amount: 100000, ratio: 81 },
-    { categoryId: 2, categoryName: '餐飲', amount: 23456, ratio: 19 },
+    {
+      categoryId: 1,
+      categoryName: '居住',
+      amount: 100000,
+      ratio: 81,
+      monthlyAmounts: monthly({ 1: 50000, 3: 50000 }),
+    },
+    {
+      categoryId: 2,
+      categoryName: '餐飲',
+      amount: 23456,
+      ratio: 19,
+      monthlyAmounts: monthly({ 3: 23456 }),
+    },
   ],
-  incomeByCategory: [{ categoryId: 3, categoryName: '薪資', amount: 600000, ratio: 100 }],
+  incomeByCategory: [
+    {
+      categoryId: 3,
+      categoryName: '薪資',
+      amount: 600000,
+      ratio: 100,
+      monthlyAmounts: monthly({ 12: 600000 }),
+    },
+  ],
   months: months({ '2026-03': { incomeTotal: 50000, expenseTotal: 8000 } }),
 };
 
@@ -66,6 +91,49 @@ describe('AnnualReportPage', () => {
     );
     expect(screen.getByRole('table', { name: '支出分類明細' })).toHaveTextContent('居住');
     expect(screen.getByRole('table', { name: '收入分類明細' })).toHaveTextContent('薪資');
+  });
+
+  it('點分類展開 1–12 月金額；有金額的月份連到該月統計並帶入分類，再點一次收合', async () => {
+    useReport();
+    const { user } = renderPage();
+    const table = await screen.findByRole('table', { name: '支出分類明細' });
+
+    const button = within(table).getByRole('button', { name: /居住/ });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+
+    const list = screen.getByRole('list', { name: '居住每月金額' });
+    expect(within(list).getAllByRole('listitem')).toHaveLength(12);
+    const march = within(list).getByRole('link', { name: /3 月/ });
+    expect(march).toHaveTextContent('50,000');
+    expect(march).toHaveAttribute(
+      'href',
+      '/chart?month=2026-03&ledger=personal&type=expense&category=1',
+    );
+    // 沒有金額的月份不可點
+    expect(within(list).queryByRole('link', { name: /2 月/ })).not.toBeInTheDocument();
+    expect(within(list).getAllByRole('link')).toHaveLength(2);
+
+    // 同時只展開一個分類
+    await user.click(within(table).getByRole('button', { name: /餐飲/ }));
+    expect(screen.queryByRole('list', { name: '居住每月金額' })).not.toBeInTheDocument();
+    expect(screen.getByRole('list', { name: '餐飲每月金額' })).toBeInTheDocument();
+
+    await user.click(within(table).getByRole('button', { name: /餐飲/ }));
+    expect(screen.queryByRole('list', { name: '餐飲每月金額' })).not.toBeInTheDocument();
+  });
+
+  it('收入分類展開 → 連結帶 type=income', async () => {
+    useReport();
+    const { user } = renderPage();
+    const table = await screen.findByRole('table', { name: '收入分類明細' });
+    await user.click(within(table).getByRole('button', { name: /薪資/ }));
+    const list = screen.getByRole('list', { name: '薪資每月金額' });
+    expect(within(list).getByRole('link', { name: /12 月/ })).toHaveAttribute(
+      'href',
+      '/chart?month=2026-12&ledger=personal&type=income&category=3',
+    );
   });
 
   it('切換年度 → 以新年度查詢並更新網址', async () => {

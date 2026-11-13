@@ -2,7 +2,7 @@
  * Repository 資料 → API DTO（specs/api/api.yml components/schemas）。
  */
 import type { EntrySource, EntryType, Ledger } from '../domain/enums';
-import type { AnnualReport } from '../domain/annual-report';
+import type { AnnualCategoryShare, AnnualReport } from '../domain/annual-report';
 import type { CategoryShare, MonthlyReport } from '../domain/monthly-report';
 import type { CategoryDetail } from '../repositories/category-repository';
 import type {
@@ -174,9 +174,18 @@ export interface AnnualReportDto {
   incomeTotal: number;
   expenseTotal: number;
   balance: number;
-  expenseByCategory: ExpenseCategoryShareDto[];
-  incomeByCategory: ExpenseCategoryShareDto[];
+  expenseByCategory: AnnualCategoryShareDto[];
+  incomeByCategory: AnnualCategoryShareDto[];
   months: MonthTotalsDto[];
+}
+
+export interface AnnualCategoryShareDto extends ExpenseCategoryShareDto {
+  /** 1–12 月金額（index 0 = 1 月） */
+  monthlyAmounts: number[];
+}
+
+function toAnnualShareDto(share: AnnualCategoryShare): AnnualCategoryShareDto {
+  return { ...toShareDto(share), monthlyAmounts: [...share.monthlyAmounts] };
 }
 
 export function toAnnualReportDto(report: AnnualReport): AnnualReportDto {
@@ -186,8 +195,8 @@ export function toAnnualReportDto(report: AnnualReport): AnnualReportDto {
     incomeTotal: report.incomeTotal,
     expenseTotal: report.expenseTotal,
     balance: report.balance,
-    expenseByCategory: report.expenseByCategory.map(toShareDto),
-    incomeByCategory: report.incomeByCategory.map(toShareDto),
+    expenseByCategory: report.expenseByCategory.map(toAnnualShareDto),
+    incomeByCategory: report.incomeByCategory.map(toAnnualShareDto),
     months: report.months.map((month) => ({
       month: month.month,
       incomeTotal: month.incomeTotal,

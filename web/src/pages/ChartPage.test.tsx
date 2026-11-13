@@ -559,6 +559,19 @@ describe('ChartPage：點擊分類查看細項', () => {
     expect(screen.queryByRole('region', { name: '餐飲細項' })).not.toBeInTheDocument();
   });
 
+  it('網址帶 type & category（由年度報表進入）→ 直接展開該分類細項', async () => {
+    renderChart('?month=2026-11&ledger=personal&type=expense&category=1');
+    const region = await screen.findByRole('region', { name: '餐飲細項' });
+    expect(await within(region).findAllByRole('link')).toHaveLength(2);
+    expect(categoryButton('餐飲')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('網址 category 不合法 → 不展開', async () => {
+    renderChart('?month=2026-11&ledger=personal&type=expense&category=abc');
+    await screen.findByRole('table', { name: '支出分類明細' });
+    expect(categoryButton('餐飲')).toHaveAttribute('aria-expanded', 'false');
+  });
+
   it('收入分類也能展開；同時只展開一個分類', async () => {
     const { user } = renderChart('?month=2026-11&ledger=personal');
     await screen.findByRole('table', { name: '收入分類明細' });

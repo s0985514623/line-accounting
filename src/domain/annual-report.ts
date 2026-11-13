@@ -3,17 +3,25 @@
  *
  *  - 合計、結餘、分類佔比：規則與月度報表相同（重用 buildMonthlyReport：金額降冪、同額 categoryId 升冪，
  *    ratio 四捨五入至小數一位）。
+ *  - 每個分類附 monthlyAmounts：該分類 1–12 月的金額（固定 12 筆，無紀錄為 0）。
  *  - months：固定 12 筆（1–12 月，依序），沒有紀錄的月份金額為 0；balance = income - expense。
  */
 import type { EntryType, Ledger } from './enums';
 import { buildMonthlyReport, type CategoryShare, type CategoryTotalRow } from './monthly-report';
 
-/** 已按 (月份, 收支) 彙總的一列。 */
+/** 已按 (月份, 收支, 分類) 彙總的一列。 */
 export interface MonthTotalRow {
   /** 'YYYY-MM' */
   month: string;
   entryType: EntryType;
+  categoryId: number;
   amount: number;
+}
+
+/** 年度分類佔比：另附 1–12 月的金額。 */
+export interface AnnualCategoryShare extends CategoryShare {
+  /** index 0 = 1 月 … 11 = 12 月 */
+  monthlyAmounts: number[];
 }
 
 export interface MonthTotals {
@@ -30,8 +38,8 @@ export interface AnnualReport {
   incomeTotal: number;
   expenseTotal: number;
   balance: number;
-  expenseByCategory: CategoryShare[];
-  incomeByCategory: CategoryShare[];
+  expenseByCategory: AnnualCategoryShare[];
+  incomeByCategory: AnnualCategoryShare[];
   /** 1–12 月，固定 12 筆 */
   months: MonthTotals[];
 }
@@ -54,6 +62,23 @@ export function buildAnnualReport(input: AnnualReportInput): AnnualReport {
     rows: input.categoryRows,
   });
 
+  const monthKeys = Array.from({ length: 12 }, (_, index) => monthKey(input.year, index + 1));
+  const withMonthly =
+    (entryType: EntryType) =>
+    (share: CategoryShare): AnnualCategoryShare => ({
+      ...share,
+      monthlyAmounts: monthKeys.map((month) =>
+        input.monthRows
+          .filter(
+            (row) =>
+              row.month === month &&
+              row.entryType === entryType &&
+              row.categoryId === share.categoryId,
+          )
+          .reduce((total, row) => total + row.amount, 0),
+      ),
+    });
+
   const months = Array.from({ length: 12 }, (_, index) => {
     const month = monthKey(input.year, index + 1);
     const sum = (entryType: EntryType) =>
@@ -71,8 +96,8 @@ export function buildAnnualReport(input: AnnualReportInput): AnnualReport {
     incomeTotal: base.incomeTotal,
     expenseTotal: base.expenseTotal,
     balance: base.balance,
-    expenseByCategory: base.expenseByCategory,
-    incomeByCategory: base.incomeByCategory,
+    expenseByCategory: base.expenseByCategory.map(withMonthly('expense')),
+    incomeByCategory: base.incomeByCategory.map(withMonthly('income')),
     months,
   };
 }

@@ -441,6 +441,10 @@ describe('[Error] 錯誤 body 形狀與狀態碼符合 api.yml', () => {
       amount: 8120,
       ratio: 98.8,
     });
+    const monthly = response.body.expenseByCategory[0].monthlyAmounts as number[];
+    expect(monthly).toHaveLength(12);
+    expect(monthly[2]).toBe(8000);
+    expect(monthly.reduce((sum, amount) => sum + amount, 0)).toBe(8120);
     expect(response.body.months).toHaveLength(12);
     expect(response.body.months[0]).toEqual({
       month: '2026-01',
