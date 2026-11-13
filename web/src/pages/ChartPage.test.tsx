@@ -67,7 +67,7 @@ function detailRows(name = '支出分類明細') {
     .map((row) =>
       within(row)
         .getAllByRole('cell')
-        .map((c) => c.textContent?.trim()),
+        .map((c) => c.textContent?.replace(/^[▸▾]/, '').trim()),
     );
 }
 
@@ -529,5 +529,92 @@ describe('ChartPage', () => {
       expect(within(table).getByText(evil)).toBeInTheDocument();
       expect(container.querySelector('img')).toBeNull();
     });
+  });
+});
+
+describe('ChartPage：點擊分類查看細項', () => {
+  const categoryButton = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
+
+  it('點擊支出分類展開當月該分類的每筆紀錄（日期新到舊），再點一次收合', async () => {
+    const { user } = renderChart('?month=2026-11&ledger=personal');
+    await screen.findByRole('table', { name: '支出分類明細' });
+
+    const button = categoryButton('餐飲');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'true');
+
+    const region = await screen.findByRole('region', { name: '餐飲細項' });
+    const links = await within(region).findAllByRole('link');
+    expect(links.map((link) => link.textContent)).toEqual([
+      expect.stringContaining('晚餐'),
+      expect.stringContaining('午餐'),
+    ]);
+    // 10 月的「宵夜」不屬於本月
+    expect(within(region).queryByText('宵夜')).not.toBeInTheDocument();
+    expect(within(region).getByText('和朋友')).toBeInTheDocument();
+
+    await user.click(button);
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('region', { name: '餐飲細項' })).not.toBeInTheDocument();
+  });
+
+  it('收入分類也能展開；同時只展開一個分類', async () => {
+    const { user } = renderChart('?month=2026-11&ledger=personal');
+    await screen.findByRole('table', { name: '收入分類明細' });
+
+    await user.click(categoryButton('餐飲'));
+    await screen.findByRole('region', { name: '餐飲細項' });
+    await user.click(categoryButton('薪資'));
+
+    const region = await screen.findByRole('region', { name: '薪資細項' });
+    expect(await within(region).findByText('薪資')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: '餐飲細項' })).not.toBeInTheDocument();
+  });
+
+  it('點細項中的紀錄進入編輯頁', async () => {
+    const { user } = renderRoutes(
+      [
+        { path: '/chart', element: <ChartPage /> },
+        { path: '/edit/:id', element: <div>編輯頁</div> },
+      ],
+      { pathname: '/chart', search: '?month=2026-11&ledger=personal' },
+    );
+    await screen.findByRole('table', { name: '支出分類明細' });
+    await user.click(categoryButton('餐飲'));
+    const region = await screen.findByRole('region', { name: '餐飲細項' });
+    await user.click(await within(region).findByRole('link', { name: /午餐/ }));
+
+    expect(await screen.findByText('編輯頁')).toBeInTheDocument();
+    expect(screen.getByTestId('location-pathname')).toHaveTextContent('/edit/10');
+  });
+
+  it('切換月份時收合', async () => {
+    const { user } = renderChart('?month=2026-11&ledger=personal');
+    await screen.findByRole('table', { name: '支出分類明細' });
+    await user.click(categoryButton('餐飲'));
+    await screen.findByRole('region', { name: '餐飲細項' });
+
+    fireEvent.change(screen.getByLabelText('月份'), { target: { value: '2026-10' } });
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: '餐飲細項' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('舊版回應沒有 categoryId 時以分類名稱比對', async () => {
+    server.use(
+      http.get('*/api/reports/monthly', () =>
+        HttpResponse.json(
+          reportBody({
+            expenseByCategory: [{ categoryName: '餐飲', amount: 320, ratio: 100 }],
+          }),
+        ),
+      ),
+    );
+    const { user } = renderChart('?month=2026-11&ledger=personal');
+    await screen.findByRole('table', { name: '支出分類明細' });
+    await user.click(categoryButton('餐飲'));
+    const region = await screen.findByRole('region', { name: '餐飲細項' });
+    expect(await within(region).findAllByRole('link')).toHaveLength(2);
   });
 });

@@ -1,12 +1,15 @@
+import { Fragment, useId, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { useMonthlyReport } from '../api/reports';
 import {
   ledgerSchema,
   type TCategoryShare,
+  type TEntryType,
   type TLedger,
   type TMonthlyReport,
 } from '../api/schemas';
 import { BackLink } from '../components/BackLink';
+import { CategoryDrilldown } from '../components/CategoryDrilldown';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { LedgerToggle } from '../components/LedgerToggle';
 import { LoadingStatus } from '../components/LoadingStatus';
@@ -58,16 +61,43 @@ function ReportSummary({ report }: TReportSummaryProps) {
   );
 }
 
+/** 已展開的分類（收支 + 分類鍵）；fromChart = 由圓餅圖點擊展開（需捲動到明細）。 */
+type TSelectedCategory = {
+  entryType: TEntryType;
+  key: string;
+  fromChart: boolean;
+};
+
+/** 分類鍵：優先 categoryId，舊版回應沒有時用名稱。 */
+const shareKey = (share: TCategoryShare): string =>
+  share.categoryId !== undefined ? `id:${share.categoryId}` : `name:${share.categoryName}`;
+
 type TCategoryTableProps = {
   caption: string;
   emptyText: string;
+  entryType: TEntryType;
   shares: readonly TCategoryShare[];
+  month: string;
+  ledger: TLedger;
+  selected: TSelectedCategory | null;
+  onToggle: (entryType: TEntryType, share: TCategoryShare) => void;
 };
 
 /**
  * 分類明細表（順序依 API：金額由大到小）；該收支無紀錄時顯示 emptyText。
+ * 分類名稱為按鈕：點擊展開 / 收合該分類當月的每筆紀錄（同時只展開一個分類）。
  */
-function CategoryTable({ caption, emptyText, shares }: TCategoryTableProps) {
+function CategoryTable({
+  caption,
+  emptyText,
+  entryType,
+  shares,
+  month,
+  ledger,
+  selected,
+  onToggle,
+}: TCategoryTableProps) {
+  const idPrefix = useId();
   if (shares.length === 0) {
     return <p className={styles.empty}>{emptyText}</p>;
   }
@@ -86,13 +116,46 @@ function CategoryTable({ caption, emptyText, shares }: TCategoryTableProps) {
         </tr>
       </thead>
       <tbody>
-        {shares.map((category, index) => (
-          <tr key={`${index}-${category.categoryName}`}>
-            <td className={styles.categoryCell}>{category.categoryName}</td>
-            <td className={styles.numeric}>{formatAmount(category.amount)}</td>
-            <td className={styles.numeric}>{`${category.ratio.toFixed(1)}%`}</td>
-          </tr>
-        ))}
+        {shares.map((category, index) => {
+          const key = shareKey(category);
+          const isOpen = selected?.entryType === entryType && selected.key === key;
+          const detailId = `${idPrefix}-${index}`;
+          return (
+            <Fragment key={key}>
+              <tr className={isOpen ? styles.openRow : undefined}>
+                <td className={styles.categoryCell}>
+                  <button
+                    type="button"
+                    className={styles.categoryButton}
+                    aria-expanded={isOpen}
+                    aria-controls={isOpen ? detailId : undefined}
+                    onClick={() => onToggle(entryType, category)}
+                  >
+                    <span aria-hidden="true" className={styles.chevron}>
+                      {isOpen ? '▾' : '▸'}
+                    </span>
+                    {category.categoryName}
+                  </button>
+                </td>
+                <td className={styles.numeric}>{formatAmount(category.amount)}</td>
+                <td className={styles.numeric}>{`${category.ratio.toFixed(1)}%`}</td>
+              </tr>
+              {isOpen ? (
+                <tr id={detailId} className={styles.detailRow}>
+                  <td colSpan={3}>
+                    <CategoryDrilldown
+                      month={month}
+                      ledger={ledger}
+                      entryType={entryType}
+                      share={category}
+                      scrollIntoView={selected.fromChart}
+                    />
+                  </td>
+                </tr>
+              ) : null}
+            </Fragment>
+          );
+        })}
       </tbody>
     </table>
   );
@@ -106,9 +169,25 @@ export function ChartPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { month, ledger } = resolveReportParams(searchParams);
   const reportQuery = useMonthlyReport(month, ledger);
+  const [selected, setSelected] = useState<TSelectedCategory | null>(null);
 
   const updateParams = (next: { month: string; ledger: TLedger }) => {
+    setSelected(null);
     setSearchParams({ month: next.month, ledger: next.ledger }, { replace: true });
+  };
+
+  /** 表格點擊：同一分類再點一次收合。 */
+  const toggleCategory = (entryType: TEntryType, share: TCategoryShare) => {
+    const key = shareKey(share);
+    setSelected((prev) =>
+      prev?.entryType === entryType && prev.key === key
+        ? null
+        : { entryType, key, fromChart: false },
+    );
+  };
+  /** 圓餅點擊：一律展開並捲動到明細。 */
+  const selectFromChart = (entryType: TEntryType, share: TCategoryShare) => {
+    setSelected({ entryType, key: shareKey(share), fromChart: true });
   };
 
   const renderContent = () => {
@@ -118,17 +197,29 @@ export function ChartPage() {
     return (
       <>
         <ReportSummary report={report} />
-        <ReportCharts report={report} />
-        <CategoryTable
-          caption="支出分類明細"
-          emptyText="本月無支出"
-          shares={report.expenseByCategory}
-        />
-        <CategoryTable
-          caption="收入分類明細"
-          emptyText="本月無收入"
-          shares={report.incomeByCategory}
-        />
+        <ReportCharts report={report} onSelectCategory={selectFromChart} />
+        <div className={styles.tables}>
+          <CategoryTable
+            caption="支出分類明細"
+            emptyText="本月無支出"
+            entryType="expense"
+            shares={report.expenseByCategory}
+            month={month}
+            ledger={ledger}
+            selected={selected}
+            onToggle={toggleCategory}
+          />
+          <CategoryTable
+            caption="收入分類明細"
+            emptyText="本月無收入"
+            entryType="income"
+            shares={report.incomeByCategory}
+            month={month}
+            ledger={ledger}
+            selected={selected}
+            onToggle={toggleCategory}
+          />
+        </div>
       </>
     );
   };

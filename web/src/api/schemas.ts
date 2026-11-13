@@ -76,6 +76,8 @@ export const categoryListSchema = z.object({
 
 /** 月度統計的單一分類（ratio 為百分比，分母為同收支合計，四捨五入至小數一位）。 */
 export const expenseByCategorySchema = z.object({
+  /** 舊版伺服器回應沒有此欄位；缺少時以分類名稱比對細項 */
+  categoryId: z.number().int().optional(),
   categoryName: z.string(),
   amount: z.number().int(),
   ratio: z.number(),

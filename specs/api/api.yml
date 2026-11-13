@@ -425,8 +425,9 @@ components:
 
     CategoryShare:
       type: object
-      required: [categoryName, amount, ratio]
+      required: [categoryId, categoryName, amount, ratio]
       properties:
+        categoryId: { type: integer, example: 1 }
         categoryName: { type: string, example: 餐飲 }
         amount: { type: integer, example: 300 }
         ratio: { type: number, example: 75.0, description: 百分比，四捨五入至小數一位 }
