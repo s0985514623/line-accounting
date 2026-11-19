@@ -25,7 +25,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "seed:defaults": "tsx src/cli/seed-defaults.ts",
     "seed:defaults:prod": "node dist/cli/seed-defaults.js",
-    "richmenu:setup": "tsx src/cli/setup-rich-menu.ts"
+    "line:richmenu": "node scripts/line-richmenu.mjs"
   },
   "dependencies": {
     "@line/bot-sdk": "11.4.0",

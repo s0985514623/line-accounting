@@ -32,7 +32,7 @@ push main ─▶ CI（ci.yml，workflow_call）─▶ build & push ghcr.io/s0985
 
 ## 一次性設定（依序執行）
 
-以下 `<VPS_HOST>`、`<SSH_PORT>` 請換成實值；`$` 開頭為 VPS（bash，管理員帳號），`PS>` 開頭為 Windows 開發機 PowerShell。
+以下 VPS 主機為 `139.162.95.207`、SSH port 為 `22`；`$` 開頭為 VPS（bash，管理員帳號），`PS>` 開頭為 Windows 開發機 PowerShell。
 
 ### 1. 確認 deploy 帳號與目錄
 
@@ -71,7 +71,7 @@ $ sudo chmod 600 /opt/my-services/apps/accounting/.env
 forced command 不允許 scp，因此以管理員帳號上傳後安裝：
 
 ```bash
-PS> scp -P <SSH_PORT> D:\Dev\line-accounting\deploy\deploy.sh <admin>@<VPS_HOST>:/tmp/deploy.sh
+PS> scp -P 22 D:\Dev\line-accounting\deploy\deploy.sh <admin>@139.162.95.207:/tmp/deploy.sh
 $ sudo install -o deploy -g deploy -m 755 /tmp/deploy.sh /opt/my-services/apps/accounting/deploy.sh
 $ rm /tmp/deploy.sh
 $ head -1 /opt/my-services/apps/accounting/deploy.sh | od -c | head -2   # 確認沒有 \r（CRLF）
@@ -107,14 +107,14 @@ $ sudo chmod 600 /home/deploy/.ssh/authorized_keys
 驗證（應回 `forbidden` 並以 exit 2 結束，代表 forced command 生效）：
 
 ```powershell
-PS> ssh -i "$HOME\.ssh\accounting_deploy" -p <SSH_PORT> deploy@<VPS_HOST> "ls"
+PS> ssh -i "$HOME\.ssh\accounting_deploy" -p 22 deploy@139.162.95.207 "ls"
 forbidden
 ```
 
 ### 5. 取得 known_hosts（必須人工核對指紋）
 
 ```powershell
-PS> ssh-keyscan -p <SSH_PORT> -t ed25519 <VPS_HOST> > accounting_known_hosts
+PS> ssh-keyscan -p 22 -t ed25519 139.162.95.207 > accounting_known_hosts
 PS> ssh-keygen -lf accounting_known_hosts
 ```
 
@@ -122,7 +122,7 @@ PS> ssh-keygen -lf accounting_known_hosts
 $ ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub   # 兩邊 SHA256 指紋必須相同
 ```
 
-`accounting_known_hosts` 的內容（port 非 22 時為 `[<VPS_HOST>]:<SSH_PORT> ssh-ed25519 AAAA...`）即 `VPS_KNOWN_HOSTS`。
+`accounting_known_hosts` 的內容（一行 `139.162.95.207 ssh-ed25519 AAAA...`；若日後 port 改成非 22，格式為 `[139.162.95.207]:<port> ssh-ed25519 AAAA...`）即 `VPS_KNOWN_HOSTS`。
 
 ### 6. GitHub 設定
 
@@ -152,6 +152,10 @@ Repository → Settings → Environments → New environment `production`
 - Webhook redelivery：**Off**。
 - LINE Official Account Manager → 回應設定：關閉「自動回應訊息」（避免與 bot 回覆重疊）。
 - LINE Login channel → LIFF：Endpoint URL `https://accounting.ren-codes.com/liff/`，Scope 含 `openid`。
+- 聊天室下方常駐選單（Rich Menu：列表 / 新增 / 批次 / 圖表，皆開 LIFF 頁；一次性，可重跑）：在開發機執行
+  `PS> $env:LINE_CHANNEL_ACCESS_TOKEN='<正式的 token>'; $env:LIFF_ID='<正式的 LIFF ID>'; npm run line:richmenu`
+  → 預期：`✓ 已建立並設為預設選單`；手機重新打開聊天室會看到四格選單。
+  改選單文字：改 `scripts/make-richmenu-image.py` → `python scripts/make-richmenu-image.py` 重產圖片 → 再跑一次上面指令。
 
 ---
 
