@@ -447,7 +447,7 @@ GRANT CONNECT ON DATABASE line_accounting TO line_accounting;
 - [ ] Messaging API channel：取得 channel secret、發行長期 access token；Basic settings 抄下「Your user ID」→ `LINE_OWNER_USER_ID`
 - [ ] Messaging API 設定：Webhook URL `https://<subdomain>.<domain>/webhook/line`、Use webhook = On、**Webhook redelivery = Off**（ASM-10）、Auto-reply messages = Off、Greeting messages = Off → 按 Verify 應成功
 - [ ] LINE Login channel（**同 Provider**）→ 建 LIFF app：Size Full、Endpoint `https://<subdomain>.<domain>/liff/`、Scope `openid`、Bot link feature On (Aggressive) → 取得 `LIFF_ID`；channel ID → `LINE_LOGIN_CHANNEL_ID`；channel 狀態設為 Published
-- [ ] 部署後執行 Rich Menu：`IMAGE_TAG=$(cat .last_good_tag) docker compose -p line-accounting -f /opt/apps/line-accounting/compose.yml run --rm line-accounting node dist/cli/setup-rich-menu.js`（需 SSH 管理帳號，非 deploy forced command）
+- [ ] 部署後建立 Rich Menu（列表 / 新增 / 批次 / 圖表）：在開發機設好正式的 `LINE_CHANNEL_ACCESS_TOKEN`、`LIFF_ID` 後執行 `npm run line:richmenu`（詳見 deploy/README.md §7）
 
 ### I. 本機開發（Windows 11）
 
@@ -469,7 +469,7 @@ GRANT CONNECT ON DATABASE line_accounting TO line_accounting;
 - [ ] 「餐飲 12.5」→ 金額必須為正整數；「你好」→ 格式說明
 
 **統計查詢**
-- [ ] Rich Menu「本月摘要」→ 摘要 + 查看圖表按鈕 → 開啟 LIFF 圖表頁且月份/帳本正確
+- [ ] Rich Menu 四格（列表 / 新增 / 批次 / 圖表）各自開啟對應 LIFF 頁；打「本月」→ 摘要 + 查看圖表按鈕 → 開啟 LIFF 圖表頁且月份/帳本正確
 - [ ] 打「公 上月」→ 公司上月摘要
 
 **LIFF 帳目維護**
