@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, Suspense, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { ApiError } from './api/http';
+import { AppShell } from './components/AppShell';
 import { LoadingStatus } from './components/LoadingStatus';
 import { BatchFormPage } from './pages/BatchFormPage';
 import { CategoryPage } from './pages/CategoryPage';
@@ -45,34 +46,36 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter basename="/liff">
-        <Routes>
-          <Route path="/" element={<TransactionListPage />} />
-          <Route path="/new" element={<TransactionFormPage />} />
-          <Route path="/edit/:id" element={<TransactionFormPage />} />
-          <Route path="/batch" element={<BatchFormPage />} />
-          <Route path="/categories" element={<CategoryPage />} />
-          <Route path="/recurring" element={<RecurringPage />} />
-          <Route path="/recurring/new" element={<RecurringFormPage />} />
-          <Route path="/recurring/edit/:id" element={<RecurringFormPage />} />
-          <Route path="/recurring/occurrences/:id" element={<OccurrenceConfirmPage />} />
-          <Route
-            path="/chart"
-            element={
-              <Suspense fallback={<LoadingStatus />}>
-                <ChartPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/annual"
-            element={
-              <Suspense fallback={<LoadingStatus />}>
-                <AnnualReportPage />
-              </Suspense>
-            }
-          />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<TransactionListPage />} />
+            <Route path="/new" element={<TransactionFormPage />} />
+            <Route path="/edit/:id" element={<TransactionFormPage />} />
+            <Route path="/batch" element={<BatchFormPage />} />
+            <Route path="/categories" element={<CategoryPage />} />
+            <Route path="/recurring" element={<RecurringPage />} />
+            <Route path="/recurring/new" element={<RecurringFormPage />} />
+            <Route path="/recurring/edit/:id" element={<RecurringFormPage />} />
+            <Route path="/recurring/occurrences/:id" element={<OccurrenceConfirmPage />} />
+            <Route
+              path="/chart"
+              element={
+                <Suspense fallback={<LoadingStatus />}>
+                  <ChartPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/annual"
+              element={
+                <Suspense fallback={<LoadingStatus />}>
+                  <AnnualReportPage />
+                </Suspense>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AppShell>
       </BrowserRouter>
     </QueryClientProvider>
   );

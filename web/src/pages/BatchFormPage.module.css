@@ -1,5 +1,5 @@
 .page {
-  max-width: 640px;
+  max-width: var(--page-max-width-wide);
   margin: 0 auto;
   padding: var(--space-4);
   padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom));

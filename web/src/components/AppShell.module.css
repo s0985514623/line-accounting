@@ -1,0 +1,76 @@
+/* 桌機版外框：左側固定側欄 + 右側內容 */
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  height: 100vh;
+  padding: var(--space-5) var(--space-3);
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-card);
+}
+
+.brand {
+  padding: 0 var(--space-3);
+  color: var(--color-brand-strong);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.navLink {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.navLink:hover {
+  background: var(--color-surface-overlay);
+}
+
+.active,
+.active:hover {
+  background: var(--color-brand);
+  color: #fff;
+}
+
+.logout {
+  margin-top: auto;
+  min-height: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-card);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.logout:hover {
+  background: var(--color-surface-overlay);
+}
+
+.content {
+  min-width: 0;
+  padding: var(--space-4) var(--space-6);
+}
+
+/* 側欄已提供導覽：隱藏列表頁的手機版功能選單與返回連結 */
+.content :global(nav[aria-label='功能選單']) {
+  display: none;
+}
