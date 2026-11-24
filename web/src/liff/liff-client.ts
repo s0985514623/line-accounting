@@ -71,3 +71,14 @@ export function getIdToken(): string | null {
 export function login(): void {
   liff.login();
 }
+
+/** 是否在 LINE App 內開啟（LIFF browser）；外部瀏覽器（桌機網頁版）回傳 false。 */
+export function isInLineApp(): boolean {
+  return liff.isInClient();
+}
+
+/** 登出（僅外部瀏覽器有意義）並重新整理，下次載入會導向 LINE Login。 */
+export function logout(): void {
+  liff.logout();
+  window.location.reload();
+}
